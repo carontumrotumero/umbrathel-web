@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+    <title>Navegador</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="tabstrip">
+      <div id="traffic-light-spacer"></div>
+      <div id="tabs"></div>
+      <button id="new-tab-btn" title="Nueva pestaña (⌘T)">+</button>
+    </div>
+
+    <div id="toolbar">
+      <div class="btn-cluster">
+        <button id="back-btn" class="nav-btn" title="Atrás">&#8592;</button>
+        <button id="forward-btn" class="nav-btn" title="Adelante">&#8594;</button>
+        <button id="reload-btn" class="nav-btn" title="Recargar">&#8635;</button>
+      </div>
+
+      <form id="address-form">
+        <input id="address-input" type="text" placeholder="Buscar o escribir una URL" autocomplete="off" spellcheck="false" />
+      </form>
+
+      <div class="btn-cluster">
+        <button id="bookmark-btn" class="nav-btn" title="Guardar en marcadores">&#9734;</button>
+        <button id="bookmarks-btn" class="nav-btn" title="Marcadores">&#9776;</button>
+        <button id="history-btn" class="nav-btn" title="Historial">&#8986;</button>
+        <button id="settings-btn" class="nav-btn" title="Personalizar">&#9881;</button>
+      </div>
+
+      <div id="progress-bar"></div>
+    </div>
+
+    <div id="bookmarks-panel" class="panel hidden">
+      <div class="panel-header">
+        <span>Marcadores</span>
+        <button class="panel-close" data-close="bookmarks-panel">&times;</button>
+      </div>
+      <ul id="bookmarks-list" class="panel-list"></ul>
+    </div>
+
+    <div id="history-panel" class="panel hidden">
+      <div class="panel-header">
+        <span>Historial</span>
+        <button id="clear-history-btn">Borrar</button>
+        <button class="panel-close" data-close="history-panel">&times;</button>
+      </div>
+      <ul id="history-list" class="panel-list"></ul>
+    </div>
+
+    <div id="settings-panel" class="panel panel-wide hidden">
+      <div class="panel-header">
+        <span>Personalizar</span>
+        <button class="panel-close" data-close="settings-panel">&times;</button>
+      </div>
+      <div class="panel-body">
+        <section class="settings-section">
+          <h3>General</h3>
+          <label class="settings-row">
+            <span>Al cerrar la última pestaña</span>
+            <select id="set-close-last">
+              <option value="ask">Preguntar</option>
+              <option value="quit">Cerrar navegador</option>
+              <option value="newtab">Abrir pestaña de inicio</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3>Apariencia</h3>
+          <label class="settings-row">
+            <span>Color de acento</span>
+            <input type="color" id="set-accent" />
+          </label>
+          <label class="settings-row">
+            <span>Bordes de navegación</span>
+            <select id="set-border-mode">
+              <option value="glass">Cristal (por defecto)</option>
+              <option value="colors">Colores</option>
+            </select>
+          </label>
+          <div class="settings-row" id="border-colors-row">
+            <span>Colores del borde</span>
+            <span class="color-pair">
+              <input type="color" id="set-border-c1" />
+              <input type="color" id="set-border-c2" />
+            </span>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Pantalla de inicio</h3>
+          <label class="settings-row">
+            <span>Fondo</span>
+            <select id="set-bg-type">
+              <option value="default">Escudo de Umbrathel</option>
+              <option value="color">Color</option>
+              <option value="gradient">Degradado</option>
+              <option value="image">Imagen…</option>
+            </select>
+          </label>
+          <div class="settings-row hidden" id="bg-color-row">
+            <span>Color de fondo</span>
+            <input type="color" id="set-bg-color" />
+          </div>
+          <div class="settings-row hidden" id="bg-gradient-row">
+            <span>Degradado</span>
+            <span class="color-pair">
+              <input type="color" id="set-bg-from" />
+              <input type="color" id="set-bg-to" />
+            </span>
+          </div>
+          <div class="settings-row hidden" id="bg-image-row">
+            <span id="bg-image-name">Sin imagen</span>
+            <button id="set-bg-image-btn" class="mini-btn">Elegir imagen…</button>
+          </div>
+
+          <h4>Accesos rápidos</h4>
+          <ul id="shortcuts-editor"></ul>
+          <button id="add-shortcut-btn" class="mini-btn">+ Añadir acceso rápido</button>
+        </section>
+
+        <section class="settings-section">
+          <h3>Actualizaciones</h3>
+          <div class="settings-row">
+            <span id="version-label">Versión —</span>
+            <button id="check-updates-btn" class="mini-btn">Buscar actualizaciones</button>
+          </div>
+          <div id="update-result" class="update-result"></div>
+        </section>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

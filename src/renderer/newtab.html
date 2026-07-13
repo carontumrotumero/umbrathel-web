@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nueva pestaña</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --ink: #1c1c21;
+        --ink-soft: rgba(28, 28, 33, 0.55);
+        --card: rgba(255, 255, 255, 0.55);
+        --card-border: rgba(255, 255, 255, 0.7);
+        --accent: #0a84ff;
+        --bg1: #dfe6f2;
+        --bg2: #e8dff2;
+        --bg3: #dff2ea;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #f2f2f7;
+          --ink-soft: rgba(242, 242, 247, 0.55);
+          --card: rgba(255, 255, 255, 0.08);
+          --card-border: rgba(255, 255, 255, 0.14);
+          --bg1: #16181f;
+          --bg2: #1d1726;
+          --bg3: #142019;
+        }
+      }
+
+      html,
+      body {
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Segoe UI", sans-serif;
+        color: var(--ink);
+        user-select: none;
+        overflow: hidden;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 34px;
+        background: linear-gradient(120deg, var(--bg1), var(--bg2), var(--bg3), var(--bg1));
+        background-size: 300% 300%;
+        animation: bg-drift 24s ease-in-out infinite;
+      }
+
+      body.custom-bg {
+        animation: none;
+        background-size: cover;
+        background-position: center;
+      }
+
+      @keyframes bg-drift {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+      }
+
+      #emblem {
+        position: fixed;
+        inset: 0;
+        display: none;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: min(62vh, 62vw);
+        opacity: 0.16;
+        filter: saturate(1.1);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      body.emblem-bg #emblem {
+        display: block;
+      }
+
+      #clock,
+      #greeting,
+      #search-form,
+      #shortcuts {
+        position: relative;
+        z-index: 1;
+      }
+
+      .rise {
+        animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(26px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      #clock {
+        font-size: 84px;
+        font-weight: 200;
+        letter-spacing: -2px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 24px rgba(0, 0, 0, 0.25);
+      }
+
+      #greeting {
+        font-size: 19px;
+        color: var(--ink-soft);
+        animation-delay: 0.1s;
+      }
+
+      body.custom-bg #greeting {
+        color: var(--ink);
+        opacity: 0.85;
+        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+      }
+
+      #search-form {
+        width: min(560px, 84vw);
+        animation-delay: 0.18s;
+      }
+
+      #search-input {
+        width: 100%;
+        height: 52px;
+        border: 1px solid var(--card-border);
+        background: var(--card);
+        backdrop-filter: blur(24px) saturate(1.5);
+        -webkit-backdrop-filter: blur(24px) saturate(1.5);
+        border-radius: 26px;
+        padding: 0 24px;
+        font-size: 16px;
+        color: var(--ink);
+        outline: none;
+        text-align: center;
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12);
+        transition: box-shadow 0.3s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), text-align 0.2s;
+      }
+
+      #search-input::placeholder {
+        color: var(--ink-soft);
+      }
+
+      #search-input:focus {
+        text-align: left;
+        transform: scale(1.03);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent),
+          0 14px 44px rgba(0, 0, 0, 0.18);
+      }
+
+      #shortcuts {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 16px;
+        max-width: 86vw;
+        animation-delay: 0.26s;
+      }
+
+      .shortcut {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 9px;
+        width: 92px;
+        padding: 16px 8px 13px;
+        border-radius: 20px;
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        backdrop-filter: blur(24px) saturate(1.5);
+        -webkit-backdrop-filter: blur(24px) saturate(1.5);
+        text-decoration: none;
+        color: var(--ink);
+        font-size: 12px;
+        transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s;
+      }
+
+      .shortcut:hover {
+        transform: translateY(-6px) scale(1.05);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+      }
+
+      .shortcut:active {
+        transform: translateY(-2px) scale(0.97);
+      }
+
+      .shortcut-label {
+        max-width: 82px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .shortcut-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        font-size: 19px;
+        font-weight: 700;
+        color: #fff;
+        overflow: hidden;
+      }
+
+      .shortcut-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="emblem"></div>
+    <div id="clock" class="rise">--:--</div>
+    <div id="greeting" class="rise">Hola</div>
+
+    <form id="search-form" class="rise" action="https://www.google.com/search" method="GET">
+      <input id="search-input" name="q" type="text" placeholder="Buscar en la web" autocomplete="off" spellcheck="false" autofocus />
+    </form>
+
+    <div id="shortcuts" class="rise"></div>
+
+    <script src="newtab.js"></script>
+  </body>
+</html>
