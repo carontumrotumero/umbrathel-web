@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   setContentVisible: (visible) => ipcRenderer.invoke('view:setContentVisible', visible),
 
   toggleDiscord: () => ipcRenderer.invoke('discord:toggle'),
+  toggleDiscordSize: () => ipcRenderer.invoke('discord:toggleSize'),
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),

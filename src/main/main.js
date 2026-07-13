@@ -18,7 +18,10 @@ const TOOLBAR_HEIGHT = 96;
 const CONTENT_GAP = 10;
 const CONTENT_RADIUS = 12;
 const DISCORD_URL = 'https://discord.com/app';
+// Modo "voz": panel compacto, pensado solo para entrar rápido a un canal de voz.
 const DISCORD_WIDTH = 400;
+// Modo "escribir" (⌘⇧D): panel amplio para leer y redactar mensajes con comodidad.
+const DISCORD_WRITE_WIDTH = 760;
 // Discord solo muestra el login con código QR cuando la página tiene ~896px+
 // de ancho; por debajo la oculta y deja solo el formulario. Ensanchamos el
 // panel automáticamente mientras se está autenticando.
@@ -40,6 +43,7 @@ let nextTabId = 1;
 let discordView = null;
 let discordVisible = false;
 let discordLoginMode = false;
+let discordWriteMode = false;
 
 function normalizeUrl(input) {
   const value = input.trim();
@@ -79,6 +83,7 @@ function sendToolbarUpdate() {
     bookmarked: activeWc ? store.isBookmarked(activeWc.getURL()) : false,
     discordOpen: discordVisible,
     discordActive: discordView !== null,
+    discordWriteMode,
   });
 }
 
@@ -88,7 +93,11 @@ function layoutActiveView() {
   if (!win || win.isDestroyed()) return;
   const bounds = win.getContentBounds();
   const contentHeight = Math.max(0, bounds.height - TOOLBAR_HEIGHT - CONTENT_GAP);
-  const discordWidth = discordLoginMode ? DISCORD_LOGIN_WIDTH : DISCORD_WIDTH;
+  const discordWidth = discordLoginMode
+    ? DISCORD_LOGIN_WIDTH
+    : discordWriteMode
+      ? DISCORD_WRITE_WIDTH
+      : DISCORD_WIDTH;
   const discordSpace = discordVisible ? discordWidth + CONTENT_GAP : 0;
 
   if (discordView && discordVisible) {
@@ -301,6 +310,13 @@ function setDiscordVisible(visible) {
   }
   layoutActiveView();
   sendToolbarUpdate();
+}
+
+function toggleDiscordSize() {
+  // Cerrado → primera pulsación abre directamente en modo escribir (grande).
+  // Abierto → alterna entre escribir (grande) y voz (compacto), sin cerrarlo.
+  discordWriteMode = discordVisible ? !discordWriteMode : true;
+  setDiscordVisible(true);
 }
 
 function broadcastSettings() {
@@ -526,6 +542,7 @@ ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 ipcMain.handle('view:setContentVisible', (_e, visible) => setContentVisible(visible));
 
 ipcMain.handle('discord:toggle', () => setDiscordVisible(!discordVisible));
+ipcMain.handle('discord:toggleSize', () => toggleDiscordSize());
 
 // ---- Personalización ----
 

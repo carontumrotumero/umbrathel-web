@@ -15,6 +15,8 @@ inicio totalmente personalizable.
   imágenes de tu ordenador), fondo por color / degradado / imagen, y el escudo de Umbrathel
   como fondo por defecto.
 - **Bordes de navegación personalizables** con los colores que elijas, y color de acento propio.
+- **Panel rápido de Discord**: acoplado a la derecha, con voz en segundo plano aunque esté
+  cerrado, y dos tamaños (voz compacto / escribir amplio) que se alternan con ⌘⇧D.
 - **Marcadores e historial** persistentes.
 - **Comprobador de actualizaciones** contra GitHub Releases.
 
@@ -32,6 +34,7 @@ npm start
 | ⌘T | Nueva pestaña |
 | ⌘L | Foco en la barra de direcciones |
 | ⌘R | Recargar |
+| ⌘⇧D | Discord: alternar entre panel de escribir (amplio) y de voz (compacto) |
 | Esc | Cerrar paneles |
 
 ## Publicar una versión

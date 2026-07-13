@@ -66,6 +66,10 @@ function renderToolbar(state) {
 
   discordBtn.classList.toggle('discord-open', !!state.discordOpen);
   discordBtn.classList.toggle('discord-live', !!state.discordActive && !state.discordOpen);
+  discordBtn.classList.toggle('discord-write', !!state.discordWriteMode && !!state.discordOpen);
+  discordBtn.title = state.discordWriteMode
+    ? 'Discord — modo escribir (⌘⇧D para modo voz)'
+    : 'Discord — panel rápido (⌘⇧D para modo escribir)';
 
   const activeLoading = state.tabs.some((t) => t.id === state.activeTabId && t.loading);
   progressBar.classList.toggle('loading', activeLoading);
@@ -223,6 +227,10 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key === 'l') {
     e.preventDefault();
     addressInput.focus();
+  }
+  if (mod && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault();
+    window.api.toggleDiscordSize();
   }
   if (mod && e.key === 'r') {
     e.preventDefault();
