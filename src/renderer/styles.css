@@ -258,20 +258,30 @@ body {
   margin: 0 auto;
 }
 
-#discord-btn {
+.pinned-btn {
   position: relative;
+  overflow: visible;
 }
 
-#discord-btn.discord-open {
-  color: #5865f2;
-  background: rgba(88, 101, 242, 0.16);
+.pinned-btn img {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: block;
+  margin: 0 auto;
+  object-fit: cover;
 }
 
-#discord-btn.discord-write {
-  box-shadow: inset 0 0 0 1.5px rgba(88, 101, 242, 0.55);
+.pinned-btn.pinned-open {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
-#discord-btn.discord-live::after {
+.pinned-btn.pinned-wide {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.pinned-btn.pinned-live::after {
   content: '';
   position: absolute;
   top: 3px;
@@ -745,4 +755,255 @@ body {
 
 .update-result a {
   color: var(--accent);
+}
+
+/* ---------- Perfiles ---------- */
+
+.profile-btn {
+  -webkit-app-region: no-drag;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  margin-right: 4px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+.profile-btn:hover {
+  transform: scale(1.12);
+}
+
+#profile-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--glass-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.panel-menu {
+  top: 46px;
+  left: 14px;
+  right: auto;
+  width: 240px;
+  transform-origin: top left;
+}
+
+.panel-menu-footer {
+  padding: 8px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.panel-menu-footer .mini-btn {
+  width: 100%;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.profile-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.profile-row-name {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.profile-row.is-active {
+  background: var(--accent-soft);
+}
+
+.profile-check {
+  color: var(--accent);
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+}
+
+/* ---------- Grupos de pestañas ---------- */
+
+.tab-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  border-radius: 10px;
+  animation: tab-in 0.3s var(--ease-spring);
+}
+
+.tab-group-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tab-group-pill[contenteditable='true'] {
+  cursor: text;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.tab-group-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab-group-tabs.collapsed {
+  display: none;
+}
+
+.tab-group-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* ---------- Apps ancladas / servidores MC / perfiles: filas del editor ---------- */
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin: -2px 0 8px;
+}
+
+.editor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  margin-bottom: 6px;
+  animation: item-in 0.25s var(--ease-out) backwards;
+}
+
+.editor-row input[type='text'] {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.editor-row input[type='color'] {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ---------- Panel de notas ---------- */
+
+.notes-list {
+  padding: 8px;
+}
+
+.note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  margin-bottom: 8px;
+  animation: item-in 0.25s var(--ease-out) backwards;
+}
+
+.note-card:hover {
+  background: var(--glass);
+}
+
+.note-title-input {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
+.note-body-input {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 50px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.note-card-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.note-delete-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.note-delete-btn:hover {
+  background: rgba(255, 69, 58, 0.18);
+  color: #ff453a;
+}
+
+.panel-header-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 7px;
+  padding: 4px 9px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.panel-header-btn:hover {
+  background: var(--glass);
 }

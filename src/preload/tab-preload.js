@@ -5,5 +5,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 if (window.location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('umbrathel', {
     getNewTabData: () => ipcRenderer.invoke('newtab:data'),
+    checkMcServer: (address) => ipcRenderer.invoke('mcservers:status', address),
   });
 }

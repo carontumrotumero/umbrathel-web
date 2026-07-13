@@ -7,6 +7,8 @@ const {
   dialog,
   nativeImage,
   session,
+  Menu,
+  MenuItem,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -17,32 +19,45 @@ const updater = require('./updater');
 const TOOLBAR_HEIGHT = 96;
 const CONTENT_GAP = 10;
 const CONTENT_RADIUS = 12;
-const DISCORD_URL = 'https://discord.com/app';
-// Modo "voz": panel compacto, pensado solo para entrar rápido a un canal de voz.
-const DISCORD_WIDTH = 400;
-// Modo "escribir" (⌘⇧D): panel amplio para leer y redactar mensajes con comodidad.
-const DISCORD_WRITE_WIDTH = 760;
+// Modo "compacto": panel acoplado estrecho, pensado para vistazos rápidos (voz, mapa…).
+const DOCK_WIDTH = 400;
+// Modo "amplio" (⌘⇧D): panel acoplado ancho para leer/escribir con comodidad.
+const DOCK_WRITE_WIDTH = 760;
 // Discord solo muestra el login con código QR cuando la página tiene ~896px+
 // de ancho; por debajo la oculta y deja solo el formulario. Ensanchamos el
-// panel automáticamente mientras se está autenticando.
-const DISCORD_LOGIN_WIDTH = 960;
-const DISCORD_AUTH_PATHS = ['/login', '/register'];
+// panel automáticamente mientras cualquier app anclada esté en esa pantalla.
+const DOCK_LOGIN_WIDTH = 960;
+const LOGIN_WIDE_HOSTS = { 'discord.com': ['/login', '/register'] };
 const NEW_TAB_URL = pathToFileURL(path.join(__dirname, '..', 'renderer', 'newtab.html')).href;
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 const ICON_URL = pathToFileURL(ICON_PATH).href;
+const GROUP_COLORS = ['#ff375f', '#ff9f0a', '#ffd60a', '#30d158', '#64d2ff', '#bf5af2'];
 
 let win = null;
+
+// ---- Estado de perfil activo ----
+let activeProfile = null;
+let activeStore = null;
+
+function currentPartition() {
+  return store.partitionFor(activeProfile.id);
+}
+
 /** @type {Map<number, WebContentsView>} */
 const tabs = new Map();
 let activeTabId = null;
 let nextTabId = 1;
+const tabGroupOf = new Map(); // tabId -> groupId
+const tabGroups = new Map(); // groupId -> { id, name, color }
+let nextGroupId = 1;
 
-// Panel rápido de Discord: una vista persistente que sigue viva (voz incluida)
-// aunque el panel esté oculto o se navegue por otras pestañas.
-let discordView = null;
-let discordVisible = false;
-let discordLoginMode = false;
-let discordWriteMode = false;
+// Apps ancladas (Discord, Dynmap, wikis…): vistas persistentes que siguen
+// vivas (voz incluida) aunque su panel esté oculto o se navegue por pestañas.
+/** @type {Map<string, WebContentsView>} */
+const pinnedViews = new Map();
+let openPinnedIds = [];
+const pinnedLoginWideIds = new Set();
+let dockWriteMode = false;
 
 function normalizeUrl(input) {
   const value = input.trim();
@@ -70,6 +85,7 @@ function sendToolbarUpdate() {
       title: view.webContents.getTitle() || 'Nueva pestaña',
       url: rawUrl === NEW_TAB_URL ? '' : rawUrl,
       loading: view.webContents.isLoading(),
+      groupId: tabGroupOf.get(id) || null,
     };
   });
   const activeView = activeTabId ? tabs.get(activeTabId) : null;
@@ -77,12 +93,13 @@ function sendToolbarUpdate() {
   win.webContents.send('tabs:state', {
     tabs: list,
     activeTabId,
+    groups: [...tabGroups.values()],
     canGoBack: activeWc ? activeWc.navigationHistory.canGoBack() : false,
     canGoForward: activeWc ? activeWc.navigationHistory.canGoForward() : false,
-    bookmarked: activeWc ? store.isBookmarked(activeWc.getURL()) : false,
-    discordOpen: discordVisible,
-    discordActive: discordView !== null,
-    discordWriteMode,
+    bookmarked: activeWc ? activeStore.isBookmarked(activeWc.getURL()) : false,
+    openPinnedIds: [...openPinnedIds],
+    pinnedActiveIds: [...pinnedViews.keys()],
+    dockWriteMode,
   });
 }
 
@@ -92,24 +109,27 @@ function layoutActiveView() {
   if (!win || win.isDestroyed()) return;
   const bounds = win.getContentBounds();
   const contentHeight = Math.max(0, bounds.height - TOOLBAR_HEIGHT - CONTENT_GAP);
-  const discordWidth = discordLoginMode
-    ? DISCORD_LOGIN_WIDTH
-    : discordWriteMode
-      ? DISCORD_WRITE_WIDTH
-      : DISCORD_WIDTH;
-  const discordSpace = discordVisible ? discordWidth + CONTENT_GAP : 0;
+  const anyLoginWide = openPinnedIds.some((id) => pinnedLoginWideIds.has(id));
+  const dockWidth = anyLoginWide ? DOCK_LOGIN_WIDTH : dockWriteMode ? DOCK_WRITE_WIDTH : DOCK_WIDTH;
+  const dockSpace = openPinnedIds.length > 0 ? dockWidth + CONTENT_GAP : 0;
 
-  if (discordView && discordVisible) {
-    discordView.setBounds(
-      contentHidden
-        ? { x: 0, y: 0, width: 0, height: 0 }
-        : {
-            x: Math.max(0, bounds.width - CONTENT_GAP - discordWidth),
-            y: TOOLBAR_HEIGHT,
-            width: Math.min(discordWidth, Math.max(0, bounds.width - CONTENT_GAP * 2)),
-            height: contentHeight,
-          }
-    );
+  if (openPinnedIds.length > 0) {
+    const n = openPinnedIds.length;
+    const each = Math.max(0, Math.floor((contentHeight - CONTENT_GAP * (n - 1)) / n));
+    openPinnedIds.forEach((id, i) => {
+      const view = pinnedViews.get(id);
+      if (!view) return;
+      view.setBounds(
+        contentHidden
+          ? { x: 0, y: 0, width: 0, height: 0 }
+          : {
+              x: Math.max(0, bounds.width - CONTENT_GAP - dockWidth),
+              y: TOOLBAR_HEIGHT + i * (each + CONTENT_GAP),
+              width: Math.min(dockWidth, Math.max(0, bounds.width - CONTENT_GAP * 2)),
+              height: each,
+            }
+      );
+    });
   }
 
   const view = activeTabId ? tabs.get(activeTabId) : null;
@@ -121,7 +141,7 @@ function layoutActiveView() {
   view.setBounds({
     x: CONTENT_GAP,
     y: TOOLBAR_HEIGHT,
-    width: Math.max(0, bounds.width - CONTENT_GAP * 2 - discordSpace),
+    width: Math.max(0, bounds.width - CONTENT_GAP * 2 - dockSpace),
     height: contentHeight,
   });
 }
@@ -129,6 +149,15 @@ function layoutActiveView() {
 function setContentVisible(visible) {
   contentHidden = !visible;
   layoutActiveView();
+  // Al abrir un panel (marcadores, notas…) las vistas nativas ancladas quedan
+  // con tamaño cero pero pueden conservar el foco de teclado (son NSView/
+  // WebContentsView aparte), dejando el panel sordo a Escape y demás atajos.
+  // Forzamos el primer respondedor de vuelta a la ventana base en ambos
+  // niveles (BrowserWindow y su webContents).
+  if (contentHidden && win && !win.isDestroyed()) {
+    win.focus();
+    win.webContents.focus();
+  }
 }
 
 function createTab(url = NEW_TAB_URL, { activate = true } = {}) {
@@ -138,6 +167,7 @@ function createTab(url = NEW_TAB_URL, { activate = true } = {}) {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      partition: currentPartition(),
     },
   });
 
@@ -155,7 +185,7 @@ function createTab(url = NEW_TAB_URL, { activate = true } = {}) {
   wc.on('page-title-updated', sendToolbarUpdate);
   wc.on('did-navigate', () => {
     sendToolbarUpdate();
-    store.addHistoryEntry({ url: wc.getURL(), title: wc.getTitle() });
+    activeStore.addHistoryEntry({ url: wc.getURL(), title: wc.getTitle() });
   });
   wc.on('did-navigate-in-page', sendToolbarUpdate);
   wc.setWindowOpenHandler(({ url: targetUrl }) => {
@@ -187,6 +217,8 @@ function destroyTab(id) {
   if (!view) return;
   win.contentView.removeChildView(view);
   tabs.delete(id);
+  tabGroupOf.delete(id);
+  cleanupEmptyGroups();
   if (activeTabId === id) activeTabId = null;
   view.webContents.close();
 }
@@ -216,7 +248,7 @@ async function closeTab(id) {
 }
 
 async function handleLastTabClose(id) {
-  const pref = store.getSettings().closeLastTab;
+  const pref = activeStore.getSettings().closeLastTab;
 
   let action = pref; // 'quit' | 'newtab' | 'ask'
   if (pref === 'ask') {
@@ -235,7 +267,7 @@ async function handleLastTabClose(id) {
     if (response === 2) return; // Cancelar
     action = response === 0 ? 'quit' : 'newtab';
     if (checkboxChecked) {
-      store.saveSettings({ closeLastTab: action });
+      activeStore.saveSettings({ closeLastTab: action });
       broadcastSettings();
     }
   }
@@ -257,74 +289,199 @@ function getActiveWebContents() {
   return view ? view.webContents : null;
 }
 
-function updateDiscordLoginMode() {
-  if (!discordView) return;
-  let isAuthPage = false;
-  try {
-    const { pathname } = new URL(discordView.webContents.getURL());
-    isAuthPage = DISCORD_AUTH_PATHS.includes(pathname);
-  } catch {
-    isAuthPage = false;
-  }
-  if (isAuthPage !== discordLoginMode) {
-    discordLoginMode = isAuthPage;
-    layoutActiveView();
+// ---- Grupos de pestañas ----
+
+function cleanupEmptyGroups() {
+  const used = new Set(tabGroupOf.values());
+  for (const id of [...tabGroups.keys()]) {
+    if (!used.has(id)) tabGroups.delete(id);
   }
 }
 
-function ensureDiscordView() {
-  if (discordView) return discordView;
-  discordView = new WebContentsView({
+function showTabContextMenu(tabId) {
+  if (!tabs.has(tabId)) return;
+  const menu = new Menu();
+  const currentGroupId = tabGroupOf.get(tabId);
+
+  menu.append(
+    new MenuItem({
+      label: 'Nuevo grupo con esta pestaña',
+      click: () => {
+        const id = `g${nextGroupId++}`;
+        const color = GROUP_COLORS[tabGroups.size % GROUP_COLORS.length];
+        tabGroups.set(id, { id, name: 'Nuevo grupo', color });
+        tabGroupOf.set(tabId, id);
+        sendToolbarUpdate();
+      },
+    })
+  );
+
+  if (tabGroups.size > 0) {
+    const submenu = new Menu();
+    for (const g of tabGroups.values()) {
+      if (g.id === currentGroupId) continue;
+      submenu.append(
+        new MenuItem({
+          label: g.name,
+          click: () => {
+            tabGroupOf.set(tabId, g.id);
+            sendToolbarUpdate();
+          },
+        })
+      );
+    }
+    if (submenu.items.length > 0) {
+      menu.append(new MenuItem({ label: 'Añadir a grupo existente', submenu }));
+    }
+  }
+
+  if (currentGroupId) {
+    menu.append(
+      new MenuItem({
+        label: 'Quitar del grupo',
+        click: () => {
+          tabGroupOf.delete(tabId);
+          cleanupEmptyGroups();
+          sendToolbarUpdate();
+        },
+      })
+    );
+  }
+
+  menu.append(new MenuItem({ type: 'separator' }));
+  menu.append(new MenuItem({ label: 'Cerrar pestaña', click: () => closeTab(tabId) }));
+
+  menu.popup({ window: win });
+}
+
+// ---- Apps ancladas (panel acoplado generalizado) ----
+
+function findPinnedConfig(id) {
+  const settings = activeStore.getSettings();
+  return (settings.pinnedApps || []).find((a) => a.id === id) || null;
+}
+
+function checkLoginWide(id, wc) {
+  try {
+    const { hostname, pathname } = new URL(wc.getURL());
+    const authPaths = LOGIN_WIDE_HOSTS[hostname.replace(/^www\./, '')];
+    const isWide = !!authPaths && authPaths.includes(pathname);
+    if (isWide) pinnedLoginWideIds.add(id);
+    else pinnedLoginWideIds.delete(id);
+    layoutActiveView();
+  } catch {
+    // URL inválida (about:blank durante la carga inicial): ignorar
+  }
+}
+
+function ensurePinnedView(id) {
+  if (pinnedViews.has(id)) return pinnedViews.get(id);
+  const config = findPinnedConfig(id);
+  if (!config) return null;
+
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      partition: currentPartition(),
     },
   });
-  if (typeof discordView.setBorderRadius === 'function') {
-    discordView.setBorderRadius(CONTENT_RADIUS);
-  }
-  discordView.setBackgroundColor('#ff313338');
-  // Los enlaces externos de Discord se abren como pestañas normales
-  discordView.webContents.setWindowOpenHandler(({ url }) => {
+  pinnedViews.set(id, view);
+
+  if (typeof view.setBorderRadius === 'function') view.setBorderRadius(CONTENT_RADIUS);
+  view.setBackgroundColor('#ff1c1d21');
+
+  const wc = view.webContents;
+  wc.setWindowOpenHandler(({ url }) => {
     createTab(url);
     return { action: 'deny' };
   });
-  // Discord es una SPA: tanto la navegación completa (llegar a /login) como
-  // los cambios de ruta internos (login → app) hay que vigilarlos los dos.
-  discordView.webContents.on('did-navigate', updateDiscordLoginMode);
-  discordView.webContents.on('did-navigate-in-page', updateDiscordLoginMode);
-  discordView.webContents.loadURL(DISCORD_URL);
-  return discordView;
+  wc.on('did-navigate', () => checkLoginWide(id, wc));
+  wc.on('did-navigate-in-page', () => checkLoginWide(id, wc));
+  wc.loadURL(config.url);
+
+  return view;
 }
 
-function setDiscordVisible(visible) {
-  discordVisible = visible;
-  if (visible) {
-    ensureDiscordView();
-    win.contentView.addChildView(discordView);
-  } else if (discordView) {
-    // Solo se oculta: la vista sigue viva y la voz conectada
-    win.contentView.removeChildView(discordView);
+function togglePinnedApp(id) {
+  const idx = openPinnedIds.indexOf(id);
+  if (idx >= 0) {
+    openPinnedIds.splice(idx, 1);
+    const view = pinnedViews.get(id);
+    if (view) win.contentView.removeChildView(view);
+  } else {
+    const view = ensurePinnedView(id);
+    if (!view) return;
+    openPinnedIds.push(id);
+    win.contentView.addChildView(view);
   }
   layoutActiveView();
   sendToolbarUpdate();
 }
 
-function toggleDiscordSize() {
-  // Cerrado → primera pulsación abre directamente en modo escribir (grande).
-  // Abierto → alterna entre escribir (grande) y voz (compacto), sin cerrarlo.
-  discordWriteMode = discordVisible ? !discordWriteMode : true;
-  setDiscordVisible(true);
+function destroyAllPinnedViews() {
+  for (const id of openPinnedIds) {
+    const view = pinnedViews.get(id);
+    if (view) win.contentView.removeChildView(view);
+  }
+  for (const view of pinnedViews.values()) view.webContents.close();
+  pinnedViews.clear();
+  openPinnedIds = [];
+  pinnedLoginWideIds.clear();
+}
+
+function toggleDockWidth() {
+  if (openPinnedIds.length === 0) return;
+  dockWriteMode = !dockWriteMode;
+  layoutActiveView();
+  sendToolbarUpdate();
 }
 
 function broadcastSettings() {
-  const settings = store.getSettings();
+  const settings = activeStore.getSettings();
   if (win && !win.isDestroyed()) win.webContents.send('settings:changed', settings);
   // Recargar las pestañas de inicio para que reflejen la nueva personalización
   for (const view of tabs.values()) {
     if (view.webContents.getURL() === NEW_TAB_URL) view.webContents.reload();
   }
+}
+
+// ---- Perfiles ----
+
+function sendProfilesState() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('profiles:state', {
+    profiles: store.listProfiles(),
+    activeProfileId: activeProfile.id,
+  });
+}
+
+function loadActiveProfile() {
+  const id = store.getActiveProfileId();
+  activeProfile = store.listProfiles().find((p) => p.id === id) || store.listProfiles()[0];
+  activeStore = store.forProfile(activeProfile.id);
+}
+
+function switchProfile(id) {
+  if (!store.listProfiles().some((p) => p.id === id) || id === activeProfile.id) return;
+  store.setActiveProfileId(id);
+  loadActiveProfile();
+
+  for (const view of tabs.values()) {
+    win.contentView.removeChildView(view);
+    view.webContents.close();
+  }
+  tabs.clear();
+  activeTabId = null;
+  tabGroupOf.clear();
+  tabGroups.clear();
+
+  destroyAllPinnedViews();
+
+  createTab(NEW_TAB_URL);
+  broadcastSettings();
+  sendProfilesState();
 }
 
 function createWindow() {
@@ -357,8 +514,8 @@ function createWindow() {
     win = null;
     tabs.clear();
     activeTabId = null;
-    discordView = null;
-    discordVisible = false;
+    pinnedViews.clear();
+    openPinnedIds = [];
   });
 
   win.webContents.on('did-finish-load', () => {
@@ -457,6 +614,8 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON_PATH)) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
+
+  loadActiveProfile();
   createWindow();
 
   app.on('activate', () => {
@@ -473,6 +632,14 @@ app.on('window-all-closed', () => {
 ipcMain.handle('tabs:new', (_e, url) => createTab(url ? normalizeUrl(url) : NEW_TAB_URL));
 ipcMain.handle('tabs:close', (_e, id) => closeTab(id));
 ipcMain.handle('tabs:activate', (_e, id) => activateTab(id));
+ipcMain.handle('tabs:contextMenu', (_e, id) => showTabContextMenu(id));
+ipcMain.handle('tabs:renameGroup', (_e, { groupId, name }) => {
+  const group = tabGroups.get(groupId);
+  if (group && name && name.trim()) {
+    group.name = name.trim();
+    sendToolbarUpdate();
+  }
+});
 
 ipcMain.handle('nav:go', (_e, input) => {
   const wc = getActiveWebContents();
@@ -500,42 +667,99 @@ ipcMain.handle('nav:stop', () => {
   if (wc) wc.stop();
 });
 
-ipcMain.handle('bookmarks:list', () => store.getBookmarks());
+ipcMain.handle('bookmarks:list', () => activeStore.getBookmarks());
 
 ipcMain.handle('bookmarks:toggle', () => {
   const wc = getActiveWebContents();
-  if (!wc) return store.getBookmarks();
+  if (!wc) return activeStore.getBookmarks();
   const url = wc.getURL();
-  if (!url || url.startsWith('file:')) return store.getBookmarks();
-  const result = store.isBookmarked(url)
-    ? store.removeBookmark(url)
-    : store.addBookmark({ url, title: wc.getTitle() });
+  if (!url || url.startsWith('file:')) return activeStore.getBookmarks();
+  const result = activeStore.isBookmarked(url)
+    ? activeStore.removeBookmark(url)
+    : activeStore.addBookmark({ url, title: wc.getTitle() });
   sendToolbarUpdate();
   return result;
 });
 
 ipcMain.handle('bookmarks:remove', (_e, url) => {
-  const result = store.removeBookmark(url);
+  const result = activeStore.removeBookmark(url);
   sendToolbarUpdate();
   return result;
 });
 
-ipcMain.handle('history:list', () => store.getHistory());
-ipcMain.handle('history:clear', () => store.clearHistory());
+ipcMain.handle('history:list', () => activeStore.getHistory());
+ipcMain.handle('history:clear', () => activeStore.clearHistory());
 
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 
 ipcMain.handle('view:setContentVisible', (_e, visible) => setContentVisible(visible));
 
-ipcMain.handle('discord:toggle', () => setDiscordVisible(!discordVisible));
-ipcMain.handle('discord:toggleSize', () => toggleDiscordSize());
+ipcMain.handle('pinned:toggle', (_e, id) => togglePinnedApp(id));
+ipcMain.handle('pinned:toggleWidth', () => toggleDockWidth());
+
+// ---- Notas ----
+
+ipcMain.handle('notes:list', () => activeStore.getNotes());
+ipcMain.handle('notes:save', (_e, note) => activeStore.saveNote(note));
+ipcMain.handle('notes:delete', (_e, id) => activeStore.deleteNote(id));
+
+// ---- Servidores de Minecraft ----
+
+ipcMain.handle('mcservers:status', async (_e, address) => {
+  try {
+    const res = await fetch(`https://api.mcsrvstat.us/3/${encodeURIComponent(address)}`, {
+      headers: { 'User-Agent': 'umbrathel-web' },
+    });
+    if (!res.ok) return { online: false };
+    const data = await res.json();
+    return {
+      online: !!data.online,
+      players: data.players ? data.players.online : null,
+      maxPlayers: data.players ? data.players.max : null,
+      motd: data.motd && data.motd.clean ? data.motd.clean.join(' ') : '',
+      version: data.version || '',
+    };
+  } catch {
+    return { online: false };
+  }
+});
+
+// ---- Perfiles ----
+
+ipcMain.handle('profiles:list', () => ({
+  profiles: store.listProfiles(),
+  activeProfileId: activeProfile.id,
+}));
+ipcMain.handle('profiles:switch', (_e, id) => switchProfile(id));
+ipcMain.handle('profiles:create', (_e, name) => {
+  const profiles = store.createProfile(name);
+  sendProfilesState();
+  return profiles;
+});
+ipcMain.handle('profiles:rename', (_e, { id, name }) => {
+  const profiles = store.renameProfile(id, name);
+  sendProfilesState();
+  return profiles;
+});
+ipcMain.handle('profiles:recolor', (_e, { id, color }) => {
+  const profiles = store.recolorProfile(id, color);
+  sendProfilesState();
+  return profiles;
+});
+ipcMain.handle('profiles:delete', (_e, id) => {
+  const wasActive = id === activeProfile.id;
+  const profiles = store.deleteProfile(id);
+  if (wasActive) switchProfile(store.getActiveProfileId());
+  else sendProfilesState();
+  return profiles;
+});
 
 // ---- Personalización ----
 
-ipcMain.handle('settings:get', () => store.getSettings());
+ipcMain.handle('settings:get', () => activeStore.getSettings());
 
 ipcMain.handle('settings:set', (_e, partial) => {
-  const merged = store.saveSettings(partial);
+  const merged = activeStore.saveSettings(partial);
   broadcastSettings();
   return merged;
 });
@@ -549,7 +773,7 @@ ipcMain.handle('settings:pickImage', async (_e, kind) => {
   if (canceled || filePaths.length === 0) return null;
 
   const src = filePaths[0];
-  const destDir = path.join(store.DATA_DIR, 'images');
+  const destDir = activeStore.imagesDir;
   fs.mkdirSync(destDir, { recursive: true });
   const dest = path.join(
     destDir,
@@ -575,7 +799,7 @@ ipcMain.handle('updates:openMacInstaller', (_e, filePath) => updater.openMacInst
 // API para la página de nueva pestaña (validada: solo responde a newtab.html)
 ipcMain.handle('newtab:data', (event) => {
   if (event.senderFrame.url !== NEW_TAB_URL) return null;
-  const settings = store.getSettings();
+  const settings = activeStore.getSettings();
   return {
     newtab: settings.newtab,
     accent: settings.accent,

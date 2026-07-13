@@ -76,6 +76,58 @@ function applyBackground(background, iconUrl) {
   }
 }
 
+const mcServersEl = document.getElementById('mcservers');
+
+function renderMcServers(servers) {
+  mcServersEl.innerHTML = '';
+  servers.forEach((server) => {
+    const card = document.createElement('div');
+    card.className = 'mc-card';
+
+    const dot = document.createElement('span');
+    dot.className = 'mc-dot';
+
+    const info = document.createElement('div');
+    info.className = 'mc-info';
+    const name = document.createElement('div');
+    name.className = 'mc-name';
+    name.textContent = server.name || server.address;
+    const meta = document.createElement('div');
+    meta.className = 'mc-meta';
+    meta.textContent = 'Consultando…';
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const copy = document.createElement('button');
+    copy.className = 'mc-copy';
+    copy.title = 'Copiar IP';
+    copy.textContent = '⧉';
+    copy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(server.address);
+      copy.classList.add('copied');
+      copy.textContent = '✓';
+      setTimeout(() => {
+        copy.classList.remove('copied');
+        copy.textContent = '⧉';
+      }, 1200);
+    });
+
+    card.appendChild(dot);
+    card.appendChild(info);
+    card.appendChild(copy);
+    mcServersEl.appendChild(card);
+
+    if (window.umbrathel && server.address) {
+      window.umbrathel.checkMcServer(server.address).then((status) => {
+        dot.classList.add(status.online ? 'online' : 'offline');
+        meta.textContent = status.online
+          ? `${server.address} · ${status.players ?? '?'}/${status.maxPlayers ?? '?'} jugadores`
+          : `${server.address} · sin conexión`;
+      });
+    }
+  });
+}
+
 async function init() {
   if (!window.umbrathel) return;
   const data = await window.umbrathel.getNewTabData();
@@ -84,6 +136,7 @@ async function init() {
   if (data.accent) document.documentElement.style.setProperty('--accent', data.accent);
   applyBackground(data.newtab.background, data.iconUrl);
   renderShortcuts(data.newtab.shortcuts || []);
+  renderMcServers(data.newtab.mcServers || []);
 }
 
 init();

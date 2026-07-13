@@ -218,6 +218,91 @@
         height: 100%;
         object-fit: cover;
       }
+
+      #mcservers {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        max-width: 86vw;
+        animation-delay: 0.32s;
+      }
+
+      #mcservers:empty {
+        display: none;
+      }
+
+      .mc-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 16px;
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        backdrop-filter: blur(24px) saturate(1.5);
+        -webkit-backdrop-filter: blur(24px) saturate(1.5);
+        font-size: 12px;
+        min-width: 180px;
+      }
+
+      .mc-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #8e8e93;
+        flex-shrink: 0;
+      }
+
+      .mc-dot.online {
+        background: #30d158;
+        box-shadow: 0 0 6px rgba(48, 209, 88, 0.8);
+      }
+
+      .mc-dot.offline {
+        background: #ff453a;
+      }
+
+      .mc-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .mc-name {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .mc-meta {
+        color: var(--ink-soft);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .mc-copy {
+        border: none;
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+        font-size: 14px;
+        padding: 4px 6px;
+        border-radius: 8px;
+        flex-shrink: 0;
+        transition: background 0.15s, color 0.15s;
+      }
+
+      .mc-copy:hover {
+        background: rgba(128, 128, 128, 0.18);
+        color: var(--ink);
+      }
+
+      .mc-copy.copied {
+        color: #30d158;
+      }
     </style>
   </head>
   <body>
@@ -230,6 +315,7 @@
     </form>
 
     <div id="shortcuts" class="rise"></div>
+    <div id="mcservers" class="rise"></div>
 
     <script src="newtab.js"></script>
   </body>

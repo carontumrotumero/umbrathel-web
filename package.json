@@ -1,7 +1,7 @@
 {
   "name": "umbrathel-web",
   "productName": "Umbrathel Web",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Umbrathel Web — navegador de escritorio construido sobre Chromium (Electron)",
   "main": "src/main/main.js",
   "author": "carontumrotumero",

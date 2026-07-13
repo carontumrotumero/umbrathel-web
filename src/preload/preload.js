@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('api', {
   newTab: (url) => ipcRenderer.invoke('tabs:new', url),
   closeTab: (id) => ipcRenderer.invoke('tabs:close', id),
   activateTab: (id) => ipcRenderer.invoke('tabs:activate', id),
+  tabContextMenu: (id) => ipcRenderer.invoke('tabs:contextMenu', id),
+  renameGroup: (groupId, name) => ipcRenderer.invoke('tabs:renameGroup', { groupId, name }),
 
   go: (input) => ipcRenderer.invoke('nav:go', input),
   back: () => ipcRenderer.invoke('nav:back'),
@@ -21,8 +23,21 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   setContentVisible: (visible) => ipcRenderer.invoke('view:setContentVisible', visible),
 
-  toggleDiscord: () => ipcRenderer.invoke('discord:toggle'),
-  toggleDiscordSize: () => ipcRenderer.invoke('discord:toggleSize'),
+  togglePinned: (id) => ipcRenderer.invoke('pinned:toggle', id),
+  toggleDockWidth: () => ipcRenderer.invoke('pinned:toggleWidth'),
+
+  listNotes: () => ipcRenderer.invoke('notes:list'),
+  saveNote: (note) => ipcRenderer.invoke('notes:save', note),
+  deleteNote: (id) => ipcRenderer.invoke('notes:delete', id),
+
+  mcServerStatus: (address) => ipcRenderer.invoke('mcservers:status', address),
+
+  listProfiles: () => ipcRenderer.invoke('profiles:list'),
+  switchProfile: (id) => ipcRenderer.invoke('profiles:switch', id),
+  createProfile: (name) => ipcRenderer.invoke('profiles:create', name),
+  renameProfile: (id, name) => ipcRenderer.invoke('profiles:rename', { id, name }),
+  recolorProfile: (id, color) => ipcRenderer.invoke('profiles:recolor', { id, color }),
+  deleteProfile: (id) => ipcRenderer.invoke('profiles:delete', id),
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
@@ -50,5 +65,11 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('tabs:state', listener);
     return () => ipcRenderer.removeListener('tabs:state', listener);
+  },
+
+  onProfilesState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('profiles:state', listener);
+    return () => ipcRenderer.removeListener('profiles:state', listener);
   },
 });

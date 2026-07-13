@@ -18,58 +18,164 @@ const clearHistoryBtn = document.getElementById('clear-history-btn');
 
 let addressFocused = false;
 let knownTabIds = new Set();
+let lastTabsState = null;
+const collapsedGroups = new Set();
+
+function buildTabEl(tab, state) {
+  const isNew = !knownTabIds.has(tab.id);
+  const el = document.createElement('div');
+  el.className = 'tab' + (tab.id === state.activeTabId ? ' active' : '') + (isNew ? ' tab-in' : '');
+  el.title = tab.url;
+
+  if (tab.loading) {
+    const spinner = document.createElement('span');
+    spinner.className = 'tab-spinner';
+    el.appendChild(spinner);
+  }
+
+  const title = document.createElement('span');
+  title.className = 'tab-title';
+  title.textContent = tab.title || tab.url || 'Nueva pestaña';
+
+  const close = document.createElement('button');
+  close.className = 'tab-close';
+  close.textContent = '×';
+  close.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.api.closeTab(tab.id);
+  });
+
+  el.appendChild(title);
+  el.appendChild(close);
+  el.addEventListener('click', () => window.api.activateTab(tab.id));
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    window.api.tabContextMenu(tab.id);
+  });
+  return el;
+}
+
+function buildGroupEl(group, groupTabs, state) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tab-group';
+
+  const pill = document.createElement('div');
+  pill.className = 'tab-group-pill';
+  pill.style.background = group.color;
+  pill.textContent = group.name;
+  pill.title = 'Clic: colapsar · doble clic: renombrar';
+
+  const tabsContainer = document.createElement('div');
+  tabsContainer.className = 'tab-group-tabs';
+  let collapsed = collapsedGroups.has(group.id);
+  tabsContainer.classList.toggle('collapsed', collapsed);
+
+  pill.addEventListener('click', () => {
+    if (pill.isContentEditable) return;
+    collapsed = !collapsed;
+    if (collapsed) collapsedGroups.add(group.id);
+    else collapsedGroups.delete(group.id);
+    tabsContainer.classList.toggle('collapsed', collapsed);
+  });
+  pill.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    pill.contentEditable = 'true';
+    pill.focus();
+    document.execCommand('selectAll', false, null);
+  });
+  pill.addEventListener('blur', () => {
+    pill.contentEditable = 'false';
+    const name = pill.textContent.trim() || group.name;
+    if (name !== group.name) window.api.renameGroup(group.id, name);
+  });
+  pill.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      pill.blur();
+    }
+  });
+
+  groupTabs.forEach((t) => tabsContainer.appendChild(buildTabEl(t, state)));
+
+  wrapper.appendChild(pill);
+  wrapper.appendChild(tabsContainer);
+  return wrapper;
+}
 
 function renderTabs(state) {
   tabsEl.innerHTML = '';
   const currentIds = new Set();
+  const groupsById = new Map((state.groups || []).map((g) => [g.id, g]));
+  const rendered = new Set();
+
   for (const tab of state.tabs) {
+    if (rendered.has(tab.id)) continue;
     currentIds.add(tab.id);
-    const isNew = !knownTabIds.has(tab.id);
 
-    const el = document.createElement('div');
-    el.className =
-      'tab' + (tab.id === state.activeTabId ? ' active' : '') + (isNew ? ' tab-in' : '');
-    el.title = tab.url;
-
-    if (tab.loading) {
-      const spinner = document.createElement('span');
-      spinner.className = 'tab-spinner';
-      el.appendChild(spinner);
+    if (tab.groupId && groupsById.has(tab.groupId)) {
+      const group = groupsById.get(tab.groupId);
+      const groupTabs = state.tabs.filter((t) => t.groupId === tab.groupId);
+      groupTabs.forEach((t) => {
+        rendered.add(t.id);
+        currentIds.add(t.id);
+      });
+      tabsEl.appendChild(buildGroupEl(group, groupTabs, state));
+    } else {
+      rendered.add(tab.id);
+      tabsEl.appendChild(buildTabEl(tab, state));
     }
-
-    const title = document.createElement('span');
-    title.className = 'tab-title';
-    title.textContent = tab.title || tab.url || 'Nueva pestaña';
-
-    const close = document.createElement('button');
-    close.className = 'tab-close';
-    close.textContent = '×';
-    close.addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.api.closeTab(tab.id);
-    });
-
-    el.appendChild(title);
-    el.appendChild(close);
-    el.addEventListener('click', () => window.api.activateTab(tab.id));
-    tabsEl.appendChild(el);
   }
   knownTabIds = currentIds;
 }
 
 const progressBar = document.getElementById('progress-bar');
-const discordBtn = document.getElementById('discord-btn');
+const pinnedAppsEl = document.getElementById('pinned-apps');
+
+const PINNED_GRADIENTS = [
+  ['#4285f4', '#34a853'],
+  ['#ff0844', '#b80f2e'],
+  ['#5c6470', '#2d323b'],
+  ['#6e5494', '#3b2e59'],
+  ['#ff6a3d', '#d93900'],
+  ['#0a84ff', '#5e5ce6'],
+  ['#ff9f0a', '#ff375f'],
+  ['#30d158', '#0a84ff'],
+];
+
+function renderPinnedButtons(settings, state) {
+  if (!settings) return;
+  pinnedAppsEl.innerHTML = '';
+  const apps = settings.pinnedApps || [];
+  const openIds = (state && state.openPinnedIds) || [];
+  const activeIds = (state && state.pinnedActiveIds) || [];
+  apps.forEach((appCfg, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-btn pinned-btn';
+    const isOpen = openIds.includes(appCfg.id);
+    const isActive = activeIds.includes(appCfg.id);
+    btn.classList.toggle('pinned-open', isOpen);
+    btn.classList.toggle('pinned-live', isActive && !isOpen);
+    btn.classList.toggle('pinned-wide', isOpen && !!(state && state.dockWriteMode));
+    btn.title = `${appCfg.title} — panel acoplado (⌘⇧D: ancho/compacto)`;
+    if (appCfg.icon) {
+      const img = document.createElement('img');
+      img.src = appCfg.icon;
+      btn.appendChild(img);
+    } else {
+      const [from, to] = PINNED_GRADIENTS[i % PINNED_GRADIENTS.length];
+      btn.style.background = isOpen ? '' : `linear-gradient(135deg, ${from}22, ${to}22)`;
+      btn.textContent = (appCfg.title || '?').trim().charAt(0).toUpperCase();
+    }
+    btn.addEventListener('click', () => window.api.togglePinned(appCfg.id));
+    pinnedAppsEl.appendChild(btn);
+  });
+}
 
 function renderToolbar(state) {
   backBtn.disabled = !state.canGoBack;
   forwardBtn.disabled = !state.canGoForward;
 
-  discordBtn.classList.toggle('discord-open', !!state.discordOpen);
-  discordBtn.classList.toggle('discord-live', !!state.discordActive && !state.discordOpen);
-  discordBtn.classList.toggle('discord-write', !!state.discordWriteMode && !!state.discordOpen);
-  discordBtn.title = state.discordWriteMode
-    ? 'Discord — modo escribir (⌘⇧D para modo voz)'
-    : 'Discord — panel rápido (⌘⇧D para modo escribir)';
+  renderPinnedButtons(currentSettings, state);
 
   const activeLoading = state.tabs.some((t) => t.id === state.activeTabId && t.loading);
   progressBar.classList.toggle('loading', activeLoading);
@@ -84,6 +190,7 @@ function renderToolbar(state) {
 }
 
 window.api.onTabsState((state) => {
+  lastTabsState = state;
   renderTabs(state);
   renderToolbar(state);
 });
@@ -109,14 +216,17 @@ addressForm.addEventListener('submit', (e) => {
 });
 
 bookmarkBtn.addEventListener('click', () => window.api.toggleBookmark());
-discordBtn.addEventListener('click', () => window.api.toggleDiscord());
 
 const settingsPanel = document.getElementById('settings-panel');
+const notesPanel = document.getElementById('notes-panel');
+const profileMenu = document.getElementById('profile-menu');
 
 function closeAllPanels() {
   bookmarksPanel.classList.add('hidden');
   historyPanel.classList.add('hidden');
   settingsPanel.classList.add('hidden');
+  notesPanel.classList.add('hidden');
+  profileMenu.classList.add('hidden');
   window.api.setContentVisible(true);
 }
 
@@ -230,7 +340,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (mod && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
     e.preventDefault();
-    window.api.toggleDiscordSize();
+    window.api.toggleDockWidth();
   }
   if (mod && e.key === 'r') {
     e.preventDefault();
@@ -239,6 +349,142 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeAllPanels();
   }
+});
+
+// ---------- Notas ----------
+
+const notesBtn = document.getElementById('notes-btn');
+const notesList = document.getElementById('notes-list');
+const addNoteBtn = document.getElementById('add-note-btn');
+
+function buildNoteCard(note) {
+  const li = document.createElement('li');
+  li.className = 'note-card';
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'note-title-input';
+  titleInput.placeholder = 'Título de la nota';
+  titleInput.value = note.title;
+
+  const bodyInput = document.createElement('textarea');
+  bodyInput.className = 'note-body-input';
+  bodyInput.placeholder = 'Coordenadas, tratados, lo que necesites apuntar…';
+  bodyInput.value = note.body;
+
+  let saveTimer = null;
+  const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      window.api.saveNote({ id: note.id, title: titleInput.value, body: bodyInput.value });
+    }, 500);
+  };
+  titleInput.addEventListener('input', scheduleSave);
+  bodyInput.addEventListener('input', scheduleSave);
+
+  const footer = document.createElement('div');
+  footer.className = 'note-card-footer';
+  const del = document.createElement('button');
+  del.className = 'note-delete-btn';
+  del.textContent = 'Eliminar';
+  del.addEventListener('click', async () => {
+    await window.api.deleteNote(note.id);
+    li.remove();
+  });
+  footer.appendChild(del);
+
+  li.appendChild(titleInput);
+  li.appendChild(bodyInput);
+  li.appendChild(footer);
+  return li;
+}
+
+function renderNotesList(notes) {
+  notesList.innerHTML = '';
+  if (notes.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'panel-empty';
+    empty.textContent = 'Sin notas todavía';
+    notesList.appendChild(empty);
+    return;
+  }
+  notes.forEach((n) => notesList.appendChild(buildNoteCard(n)));
+}
+
+async function openNotesPanel() {
+  const wasOpen = !notesPanel.classList.contains('hidden');
+  closeAllPanels();
+  if (wasOpen) return;
+  window.api.setContentVisible(false);
+  renderNotesList(await window.api.listNotes());
+  notesPanel.classList.remove('hidden');
+}
+
+notesBtn.addEventListener('click', openNotesPanel);
+addNoteBtn.addEventListener('click', async () => {
+  await window.api.saveNote({ title: '', body: '' });
+  renderNotesList(await window.api.listNotes());
+});
+
+// ---------- Perfiles ----------
+
+const profileBtn = document.getElementById('profile-btn');
+const profileDot = document.getElementById('profile-dot');
+const profileList = document.getElementById('profile-list');
+const newProfileBtn = document.getElementById('new-profile-btn');
+
+let profilesState = { profiles: [], activeProfileId: null };
+
+function renderProfileDot() {
+  const active = profilesState.profiles.find((p) => p.id === profilesState.activeProfileId);
+  profileDot.style.background = active ? active.color : 'var(--accent)';
+}
+
+function renderProfileMenu() {
+  profileList.innerHTML = '';
+  profilesState.profiles.forEach((p) => {
+    const li = document.createElement('li');
+    li.className = 'profile-row' + (p.id === profilesState.activeProfileId ? ' is-active' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'profile-color-dot';
+    dot.style.background = p.color;
+
+    const name = document.createElement('span');
+    name.className = 'profile-row-name';
+    name.textContent = p.name;
+
+    const check = document.createElement('span');
+    check.className = 'profile-check';
+    check.textContent = p.id === profilesState.activeProfileId ? '✓' : '';
+
+    li.appendChild(dot);
+    li.appendChild(name);
+    li.appendChild(check);
+    li.addEventListener('click', () => {
+      window.api.switchProfile(p.id);
+      closeAllPanels();
+    });
+    profileList.appendChild(li);
+  });
+}
+
+profileBtn.addEventListener('click', () => {
+  const wasOpen = !profileMenu.classList.contains('hidden');
+  closeAllPanels();
+  if (wasOpen) return;
+  window.api.setContentVisible(false);
+  renderProfileMenu();
+  profileMenu.classList.remove('hidden');
+});
+
+newProfileBtn.addEventListener('click', () => window.api.createProfile('Nuevo perfil'));
+
+window.api.onProfilesState((state) => {
+  profilesState = state;
+  renderProfileDot();
+  if (!profileMenu.classList.contains('hidden')) renderProfileMenu();
+  renderProfilesEditor();
 });
 
 // ---------- Personalización ----------
@@ -261,6 +507,12 @@ const setBgTo = document.getElementById('set-bg-to');
 const setBgImageBtn = document.getElementById('set-bg-image-btn');
 const shortcutsEditor = document.getElementById('shortcuts-editor');
 const addShortcutBtn = document.getElementById('add-shortcut-btn');
+const pinnedEditor = document.getElementById('pinned-editor');
+const addPinnedBtn = document.getElementById('add-pinned-btn');
+const mcEditor = document.getElementById('mcservers-editor');
+const addMcBtn = document.getElementById('add-mcserver-btn');
+const profilesEditor = document.getElementById('profiles-editor');
+const addProfileBtn = document.getElementById('add-profile-btn');
 const versionLabel = document.getElementById('version-label');
 const checkUpdatesBtn = document.getElementById('check-updates-btn');
 const updateResult = document.getElementById('update-result');
@@ -271,17 +523,6 @@ const updateActions = document.getElementById('update-actions');
 const updateActionBtn = document.getElementById('update-action-btn');
 
 let currentSettings = null;
-
-const SC_GRADIENTS = [
-  ['#4285f4', '#34a853'],
-  ['#ff0844', '#b80f2e'],
-  ['#5c6470', '#2d323b'],
-  ['#6e5494', '#3b2e59'],
-  ['#ff6a3d', '#d93900'],
-  ['#0a84ff', '#5e5ce6'],
-  ['#ff9f0a', '#ff375f'],
-  ['#30d158', '#0a84ff'],
-];
 
 function hexToRgba(hex, alpha) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -320,7 +561,7 @@ function renderShortcutEditor(shortcuts) {
       img.src = s.icon;
       iconBtn.appendChild(img);
     } else {
-      const [from, to] = SC_GRADIENTS[i % SC_GRADIENTS.length];
+      const [from, to] = PINNED_GRADIENTS[i % PINNED_GRADIENTS.length];
       iconBtn.style.background = `linear-gradient(135deg, ${from}, ${to})`;
       iconBtn.textContent = (s.title || '?').trim().charAt(0).toUpperCase();
     }
@@ -371,6 +612,145 @@ function renderShortcutEditor(shortcuts) {
   });
 }
 
+function renderPinnedEditor(pinnedApps) {
+  pinnedEditor.innerHTML = '';
+  pinnedApps.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = 'shortcut-row';
+
+    const iconBtn = document.createElement('button');
+    iconBtn.className = 'sc-icon-preview';
+    iconBtn.title = 'Cambiar icono (imagen de tu ordenador)';
+    if (p.icon) {
+      const img = document.createElement('img');
+      img.src = p.icon;
+      iconBtn.appendChild(img);
+    } else {
+      const [from, to] = PINNED_GRADIENTS[i % PINNED_GRADIENTS.length];
+      iconBtn.style.background = `linear-gradient(135deg, ${from}, ${to})`;
+      iconBtn.textContent = (p.title || '?').trim().charAt(0).toUpperCase();
+    }
+    iconBtn.addEventListener('click', async () => {
+      const url = await window.api.pickImage('pinned');
+      if (!url) return;
+      const next = currentSettings.pinnedApps.map((a, idx) => (idx === i ? { ...a, icon: url } : a));
+      await saveSettings({ pinnedApps: next });
+    });
+
+    const title = document.createElement('input');
+    title.type = 'text';
+    title.className = 'sc-title';
+    title.value = p.title || '';
+    title.placeholder = 'Nombre';
+
+    const url = document.createElement('input');
+    url.type = 'text';
+    url.className = 'sc-url';
+    url.value = p.url || '';
+    url.placeholder = 'https://…';
+
+    const commit = async () => {
+      const next = currentSettings.pinnedApps.map((a, idx) =>
+        idx === i ? { ...a, title: title.value.trim(), url: url.value.trim() } : a
+      );
+      await saveSettings({ pinnedApps: next });
+    };
+    title.addEventListener('change', commit);
+    url.addEventListener('change', commit);
+
+    const remove = document.createElement('button');
+    remove.className = 'sc-remove';
+    remove.textContent = '×';
+    remove.title = 'Eliminar';
+    remove.addEventListener('click', async () => {
+      const next = currentSettings.pinnedApps.filter((_, idx) => idx !== i);
+      await saveSettings({ pinnedApps: next });
+    });
+
+    li.appendChild(iconBtn);
+    li.appendChild(title);
+    li.appendChild(url);
+    li.appendChild(remove);
+    pinnedEditor.appendChild(li);
+  });
+}
+
+function renderMcEditor(servers) {
+  mcEditor.innerHTML = '';
+  servers.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.className = 'editor-row';
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.value = s.name || '';
+    name.placeholder = 'Nombre';
+
+    const address = document.createElement('input');
+    address.type = 'text';
+    address.value = s.address || '';
+    address.placeholder = 'ip:puerto';
+
+    const commit = async () => {
+      const next = currentSettings.newtab.mcServers.map((sv, idx) =>
+        idx === i ? { name: name.value.trim(), address: address.value.trim() } : sv
+      );
+      await saveSettings({ newtab: { mcServers: next } });
+    };
+    name.addEventListener('change', commit);
+    address.addEventListener('change', commit);
+
+    const remove = document.createElement('button');
+    remove.className = 'sc-remove';
+    remove.textContent = '×';
+    remove.title = 'Eliminar';
+    remove.addEventListener('click', async () => {
+      const next = currentSettings.newtab.mcServers.filter((_, idx) => idx !== i);
+      await saveSettings({ newtab: { mcServers: next } });
+    });
+
+    li.appendChild(name);
+    li.appendChild(address);
+    li.appendChild(remove);
+    mcEditor.appendChild(li);
+  });
+}
+
+function renderProfilesEditor() {
+  if (!profilesEditor) return;
+  profilesEditor.innerHTML = '';
+  profilesState.profiles.forEach((p) => {
+    const li = document.createElement('li');
+    li.className = 'editor-row';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = p.color;
+    colorInput.addEventListener('change', () => window.api.recolorProfile(p.id, colorInput.value));
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.value = p.name;
+    name.addEventListener('change', () => window.api.renameProfile(p.id, name.value));
+
+    const remove = document.createElement('button');
+    remove.className = 'sc-remove';
+    remove.textContent = '×';
+    const isOnly = profilesState.profiles.length <= 1;
+    remove.title = isOnly ? 'No puedes borrar el único perfil' : 'Borrar perfil';
+    remove.disabled = isOnly;
+    remove.style.opacity = isOnly ? '0.35' : '';
+    remove.addEventListener('click', () => window.api.deleteProfile(p.id));
+
+    li.appendChild(colorInput);
+    li.appendChild(name);
+    li.appendChild(remove);
+    profilesEditor.appendChild(li);
+  });
+}
+
+addProfileBtn.addEventListener('click', () => window.api.createProfile('Nuevo perfil'));
+
 function renderSettingsPanel(settings) {
   setCloseLast.value = settings.closeLastTab;
   setAccent.value = settings.accent;
@@ -390,6 +770,9 @@ function renderSettingsPanel(settings) {
   bgImageName.textContent = bg.image ? 'Imagen seleccionada ✓' : 'Sin imagen';
 
   renderShortcutEditor(settings.newtab.shortcuts);
+  renderPinnedEditor(settings.pinnedApps || []);
+  renderMcEditor(settings.newtab.mcServers || []);
+  renderProfilesEditor();
 }
 
 async function openSettingsPanel() {
@@ -454,6 +837,17 @@ addShortcutBtn.addEventListener('click', async () => {
     { title: 'Nuevo', url: 'https://', icon: null },
   ];
   await saveSettings({ newtab: { shortcuts: next } });
+});
+
+addPinnedBtn.addEventListener('click', async () => {
+  const id = `app${Date.now().toString(36)}`;
+  const next = [...(currentSettings.pinnedApps || []), { id, title: 'Nueva app', url: 'https://', icon: null }];
+  await saveSettings({ pinnedApps: next });
+});
+
+addMcBtn.addEventListener('click', async () => {
+  const next = [...(currentSettings.newtab.mcServers || []), { name: 'Servidor', address: 'play.ejemplo.net' }];
+  await saveSettings({ newtab: { mcServers: next } });
 });
 
 let pendingMacInstallerPath = null;
@@ -529,6 +923,7 @@ window.api.onUpdateProgress((payload) => {
 window.api.onSettingsChanged((settings) => {
   currentSettings = settings;
   applyChromeSettings(settings);
+  if (lastTabsState) renderPinnedButtons(currentSettings, lastTabsState);
   if (!settingsPanel.classList.contains('hidden')) {
     renderSettingsPanel(settings);
   }
@@ -537,5 +932,11 @@ window.api.onSettingsChanged((settings) => {
 (async () => {
   currentSettings = await window.api.getSettings();
   applyChromeSettings(currentSettings);
+  if (lastTabsState) renderPinnedButtons(currentSettings, lastTabsState);
   versionLabel.textContent = `Versión ${await window.api.getVersion()}`;
+})();
+
+(async () => {
+  profilesState = await window.api.listProfiles();
+  renderProfileDot();
 })();
