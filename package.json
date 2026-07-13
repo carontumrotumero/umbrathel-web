@@ -8,8 +8,8 @@
   "type": "commonjs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rotumerorontum/umbrathel-web.git",
-    "github": "rotumerorontum/umbrathel-web"
+    "url": "https://github.com/carontumrotumero/umbrathel-web.git",
+    "github": "carontumrotumero/umbrathel-web"
   },
   "scripts": {
     "start": "electron .",
@@ -26,7 +26,7 @@
     "files": ["src/**/*", "assets/**/*", "package.json"],
     "publish": {
       "provider": "github",
-      "owner": "rotumerorontum",
+      "owner": "carontumrotumero",
       "repo": "umbrathel-web"
     }
   },
