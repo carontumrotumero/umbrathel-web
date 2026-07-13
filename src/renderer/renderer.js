@@ -264,6 +264,11 @@ const addShortcutBtn = document.getElementById('add-shortcut-btn');
 const versionLabel = document.getElementById('version-label');
 const checkUpdatesBtn = document.getElementById('check-updates-btn');
 const updateResult = document.getElementById('update-result');
+const updateProgressRow = document.getElementById('update-progress-row');
+const updateProgressFill = document.getElementById('update-progress-fill');
+const updateProgressLabel = document.getElementById('update-progress-label');
+const updateActions = document.getElementById('update-actions');
+const updateActionBtn = document.getElementById('update-action-btn');
 
 let currentSettings = null;
 
@@ -451,27 +456,73 @@ addShortcutBtn.addEventListener('click', async () => {
   await saveSettings({ newtab: { shortcuts: next } });
 });
 
+let pendingMacInstallerPath = null;
+
+function setUpdateAction(label, handler) {
+  updateActionBtn.textContent = label;
+  updateActionBtn.onclick = handler;
+  updateActions.classList.remove('hidden');
+}
+
+function hideUpdateAction() {
+  updateActions.classList.add('hidden');
+  updateActionBtn.onclick = null;
+}
+
+function setUpdateProgress(percent) {
+  updateProgressRow.classList.remove('hidden');
+  updateProgressFill.style.width = `${percent}%`;
+  updateProgressLabel.textContent = `${percent}%`;
+}
+
+function hideUpdateProgress() {
+  updateProgressRow.classList.add('hidden');
+}
+
 checkUpdatesBtn.addEventListener('click', async () => {
   updateResult.textContent = 'Comprobando…';
+  hideUpdateAction();
+  hideUpdateProgress();
   const result = await window.api.checkUpdates();
   if (!result.ok) {
     updateResult.textContent = `No se pudo comprobar: ${result.error}`;
     return;
   }
   if (result.hasUpdate) {
-    updateResult.innerHTML = '';
-    const text = document.createTextNode(`Nueva versión ${result.latest} disponible — `);
-    const link = document.createElement('a');
-    link.href = '#';
-    link.textContent = 'Descargar';
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      window.api.openExternal(result.url);
+    updateResult.textContent = `Nueva versión ${result.latest} disponible.`;
+    setUpdateAction('Actualizar ahora', () => {
+      hideUpdateAction();
+      updateResult.textContent = 'Descargando actualización…';
+      window.api.startUpdate();
     });
-    updateResult.appendChild(text);
-    updateResult.appendChild(link);
   } else {
     updateResult.textContent = `Estás en la última versión (${result.current}).`;
+  }
+});
+
+window.api.onUpdateProgress((payload) => {
+  if (payload.state === 'downloading') {
+    updateResult.textContent = 'Descargando actualización…';
+    setUpdateProgress(payload.percent || 0);
+    hideUpdateAction();
+  } else if (payload.state === 'ready') {
+    hideUpdateProgress();
+    updateResult.textContent = 'Actualización descargada.';
+    setUpdateAction('Reiniciar y actualizar', () => window.api.installUpdate());
+  } else if (payload.state === 'mac-ready') {
+    hideUpdateProgress();
+    pendingMacInstallerPath = payload.path;
+    updateResult.textContent = 'Instalador descargado. Arrastra la app a Aplicaciones para completar la actualización.';
+    window.api.openMacInstaller(pendingMacInstallerPath);
+    setUpdateAction('Abrir instalador de nuevo', () => window.api.openMacInstaller(pendingMacInstallerPath));
+  } else if (payload.state === 'not-available') {
+    hideUpdateProgress();
+    hideUpdateAction();
+    updateResult.textContent = 'Estás en la última versión.';
+  } else if (payload.state === 'error') {
+    hideUpdateProgress();
+    hideUpdateAction();
+    updateResult.textContent = `Error al actualizar: ${payload.message}`;
   }
 });
 

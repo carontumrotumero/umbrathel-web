@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const store = require('./store');
-const pkg = require('../../package.json');
+const updater = require('./updater');
 
 const TOOLBAR_HEIGHT = 96;
 const CONTENT_GAP = 10;
@@ -30,7 +30,6 @@ const DISCORD_AUTH_PATHS = ['/login', '/register'];
 const NEW_TAB_URL = pathToFileURL(path.join(__dirname, '..', 'renderer', 'newtab.html')).href;
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 const ICON_URL = pathToFileURL(ICON_PATH).href;
-const GITHUB_REPO = (pkg.repository && pkg.repository.github) || '';
 
 let win = null;
 /** @type {Map<number, WebContentsView>} */
@@ -351,6 +350,8 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
+  if (process.platform !== 'darwin') updater.setupAutoUpdater(win);
+
   win.on('resize', layoutActiveView);
   win.on('closed', () => {
     win = null;
@@ -416,6 +417,32 @@ function setupWebAuthnAccountPicker(ses) {
   });
 }
 
+// Chromium (no "Google Chrome") es lo que Electron trae de fábrica. Sitios
+// como accounts.google.com bloquean el login ("This browser or app may not
+// be secure") en cuanto detectan un user-agent embebido: comprueban tanto la
+// cabecera User-Agent como los Client Hints (Sec-CH-UA), y estos últimos por
+// defecto solo listan "Chromium", nunca "Google Chrome". Lo mismo hacen
+// Brave, Vivaldi u Opera para que Google los acepte como navegador válido.
+const CHROME_MAJOR = process.versions.chrome.split('.')[0];
+
+function platformClientHint() {
+  if (process.platform === 'darwin') return '"macOS"';
+  if (process.platform === 'win32') return '"Windows"';
+  return '"Linux"';
+}
+
+function setupBrowserCompatSpoofing() {
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (/^https?:/.test(details.url)) {
+      details.requestHeaders['sec-ch-ua'] =
+        `"Not)A;Brand";v="8", "Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}"`;
+      details.requestHeaders['sec-ch-ua-mobile'] = '?0';
+      details.requestHeaders['sec-ch-ua-platform'] = platformClientHint();
+    }
+    callback({ requestHeaders: details.requestHeaders });
+  });
+}
+
 app.whenReady().then(() => {
   // UA sin las marcas de Electron: evita que Discord, Google y otros
   // servicios bloqueen el navegador por "no soportado".
@@ -423,6 +450,7 @@ app.whenReady().then(() => {
     .replace(/\sElectron\/[\d.]+/, '')
     .replace(/\sUmbrathel[- ]?[Ww]eb\/[\d.]+/, '');
 
+  setupBrowserCompatSpoofing();
   setupWebAuthn();
   setupWebAuthnAccountPicker(session.defaultSession);
 
@@ -439,48 +467,6 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-
-// ---- Actualizaciones (GitHub Releases) ----
-
-function compareVersions(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] || 0) - (pb[i] || 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
-async function checkForUpdates() {
-  if (!GITHUB_REPO) {
-    return { ok: false, error: 'Repositorio no configurado', current: app.getVersion() };
-  }
-  try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-      headers: { 'User-Agent': 'umbrathel-web', Accept: 'application/vnd.github+json' },
-    });
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: res.status === 404 ? 'Aún no hay versiones publicadas' : `HTTP ${res.status}`,
-        current: app.getVersion(),
-      };
-    }
-    const release = await res.json();
-    const latest = String(release.tag_name || '').replace(/^v/, '');
-    const current = app.getVersion();
-    return {
-      ok: true,
-      current,
-      latest,
-      hasUpdate: latest !== '' && compareVersions(latest, current) > 0,
-      url: release.html_url,
-    };
-  } catch (err) {
-    return { ok: false, error: 'Sin conexión con GitHub', current: app.getVersion() };
-  }
-}
 
 // ---- IPC ----
 
@@ -573,8 +559,18 @@ ipcMain.handle('settings:pickImage', async (_e, kind) => {
   return pathToFileURL(dest).href;
 });
 
-ipcMain.handle('updates:check', () => checkForUpdates());
+ipcMain.handle('updates:check', () => updater.checkForUpdates());
 ipcMain.handle('app:version', () => app.getVersion());
+
+ipcMain.handle('updates:start', () => {
+  if (process.platform === 'darwin') {
+    updater.startMacUpdate(win);
+  } else {
+    updater.startNativeUpdate();
+  }
+});
+ipcMain.handle('updates:install', () => updater.installNativeUpdate());
+ipcMain.handle('updates:openMacInstaller', (_e, filePath) => updater.openMacInstaller(filePath));
 
 // API para la página de nueva pestaña (validada: solo responde a newtab.html)
 ipcMain.handle('newtab:data', (event) => {

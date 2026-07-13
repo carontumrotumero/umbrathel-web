@@ -28,12 +28,22 @@ contextBridge.exposeInMainWorld('api', {
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
   pickImage: (kind) => ipcRenderer.invoke('settings:pickImage', kind),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
+  startUpdate: () => ipcRenderer.invoke('updates:start'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  openMacInstaller: (filePath) => ipcRenderer.invoke('updates:openMacInstaller', filePath),
+  platform: process.platform,
   getVersion: () => ipcRenderer.invoke('app:version'),
 
   onSettingsChanged: (callback) => {
     const listener = (_event, settings) => callback(settings);
     ipcRenderer.on('settings:changed', listener);
     return () => ipcRenderer.removeListener('settings:changed', listener);
+  },
+
+  onUpdateProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
   },
 
   onTabsState: (callback) => {
