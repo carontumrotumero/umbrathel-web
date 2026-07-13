@@ -6,6 +6,7 @@ const {
   shell,
   dialog,
   nativeImage,
+  session,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -322,12 +323,66 @@ function createWindow() {
   });
 }
 
+function setupWebAuthn() {
+  // Touch ID / passkeys (Secure Enclave): Apple exige que la app esté firmada
+  // con un Team ID y el entitlement keychain-access-groups. Solo se activa si
+  // hay Team ID configurado (UMBRATHEL_TEAM_ID o build firmado).
+  const teamId = process.env.UMBRATHEL_TEAM_ID || '';
+  if (process.platform === 'darwin' && teamId && typeof app.configureWebAuthn === 'function') {
+    try {
+      app.configureWebAuthn({
+        touchID: { keychainAccessGroup: `${teamId}.com.umbrathel.web.webauthn` },
+      });
+    } catch (err) {
+      console.warn('WebAuthn Touch ID no disponible:', err.message);
+    }
+  }
+}
+
+function setupWebAuthnAccountPicker(ses) {
+  // Cuando un sitio pide una credencial y hay varias en la llave de seguridad,
+  // Chromium necesita que el navegador muestre un selector. Sin este handler la
+  // petición se cancela en silencio y parece que "no funciona".
+  if (!ses.listenerCount || ses.listenerCount('select-webauthn-account') > 0) return;
+  ses.on('select-webauthn-account', (event, details, callback) => {
+    const accounts = details.accounts || [];
+    if (accounts.length === 0) {
+      callback();
+      return;
+    }
+    if (accounts.length === 1) {
+      callback(accounts[0].credentialId);
+      return;
+    }
+    const labels = accounts.map((a) => a.userName || a.userDisplayName || 'Cuenta');
+    dialog
+      .showMessageBox(win, {
+        type: 'question',
+        title: 'Llave de seguridad',
+        message: 'Elige la cuenta para identificarte',
+        buttons: [...labels, 'Cancelar'],
+        cancelId: accounts.length,
+      })
+      .then(({ response }) => {
+        if (response >= 0 && response < accounts.length) {
+          callback(accounts[response].credentialId);
+        } else {
+          callback();
+        }
+      })
+      .catch(() => callback());
+  });
+}
+
 app.whenReady().then(() => {
   // UA sin las marcas de Electron: evita que Discord, Google y otros
   // servicios bloqueen el navegador por "no soportado".
   app.userAgentFallback = app.userAgentFallback
     .replace(/\sElectron\/[\d.]+/, '')
     .replace(/\sUmbrathel[- ]?[Ww]eb\/[\d.]+/, '');
+
+  setupWebAuthn();
+  setupWebAuthnAccountPicker(session.defaultSession);
 
   if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON_PATH)) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
