@@ -1,7 +1,7 @@
 {
   "name": "umbrathel-web",
   "productName": "Umbrathel Web",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Umbrathel Web — navegador de escritorio construido sobre Chromium (Electron)",
   "main": "src/main/main.js",
   "private": true,
@@ -14,17 +14,76 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac",
+    "dist:all": "electron-builder --mac --win --linux"
   },
   "build": {
     "appId": "com.umbrathel.web",
     "productName": "Umbrathel Web",
+    "icon": "assets/icon.png",
     "mac": {
       "icon": "assets/icon.icns",
       "category": "public.app-category.productivity",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Network",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
     },
     "files": [
       "src/**/*",
