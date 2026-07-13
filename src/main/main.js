@@ -16,6 +16,8 @@ const pkg = require('../../package.json');
 const TOOLBAR_HEIGHT = 96;
 const CONTENT_GAP = 10;
 const CONTENT_RADIUS = 12;
+const DISCORD_URL = 'https://discord.com/app';
+const DISCORD_WIDTH = 400;
 const NEW_TAB_URL = pathToFileURL(path.join(__dirname, '..', 'renderer', 'newtab.html')).href;
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 const ICON_URL = pathToFileURL(ICON_PATH).href;
@@ -26,6 +28,11 @@ let win = null;
 const tabs = new Map();
 let activeTabId = null;
 let nextTabId = 1;
+
+// Panel rápido de Discord: una vista persistente que sigue viva (voz incluida)
+// aunque el panel esté oculto o se navegue por otras pestañas.
+let discordView = null;
+let discordVisible = false;
 
 function normalizeUrl(input) {
   const value = input.trim();
@@ -63,25 +70,43 @@ function sendToolbarUpdate() {
     canGoBack: activeWc ? activeWc.navigationHistory.canGoBack() : false,
     canGoForward: activeWc ? activeWc.navigationHistory.canGoForward() : false,
     bookmarked: activeWc ? store.isBookmarked(activeWc.getURL()) : false,
+    discordOpen: discordVisible,
+    discordActive: discordView !== null,
   });
 }
 
 let contentHidden = false;
 
 function layoutActiveView() {
-  if (!win || win.isDestroyed() || !activeTabId) return;
-  const view = tabs.get(activeTabId);
+  if (!win || win.isDestroyed()) return;
+  const bounds = win.getContentBounds();
+  const contentHeight = Math.max(0, bounds.height - TOOLBAR_HEIGHT - CONTENT_GAP);
+  const discordSpace = discordVisible ? DISCORD_WIDTH + CONTENT_GAP : 0;
+
+  if (discordView && discordVisible) {
+    discordView.setBounds(
+      contentHidden
+        ? { x: 0, y: 0, width: 0, height: 0 }
+        : {
+            x: Math.max(0, bounds.width - CONTENT_GAP - DISCORD_WIDTH),
+            y: TOOLBAR_HEIGHT,
+            width: DISCORD_WIDTH,
+            height: contentHeight,
+          }
+    );
+  }
+
+  const view = activeTabId ? tabs.get(activeTabId) : null;
   if (!view) return;
   if (contentHidden) {
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     return;
   }
-  const bounds = win.getContentBounds();
   view.setBounds({
     x: CONTENT_GAP,
     y: TOOLBAR_HEIGHT,
-    width: Math.max(0, bounds.width - CONTENT_GAP * 2),
-    height: Math.max(0, bounds.height - TOOLBAR_HEIGHT - CONTENT_GAP),
+    width: Math.max(0, bounds.width - CONTENT_GAP * 2 - discordSpace),
+    height: contentHeight,
   });
 }
 
@@ -216,6 +241,41 @@ function getActiveWebContents() {
   return view ? view.webContents : null;
 }
 
+function ensureDiscordView() {
+  if (discordView) return discordView;
+  discordView = new WebContentsView({
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  if (typeof discordView.setBorderRadius === 'function') {
+    discordView.setBorderRadius(CONTENT_RADIUS);
+  }
+  discordView.setBackgroundColor('#ff313338');
+  // Los enlaces externos de Discord se abren como pestañas normales
+  discordView.webContents.setWindowOpenHandler(({ url }) => {
+    createTab(url);
+    return { action: 'deny' };
+  });
+  discordView.webContents.loadURL(DISCORD_URL);
+  return discordView;
+}
+
+function setDiscordVisible(visible) {
+  discordVisible = visible;
+  if (visible) {
+    ensureDiscordView();
+    win.contentView.addChildView(discordView);
+  } else if (discordView) {
+    // Solo se oculta: la vista sigue viva y la voz conectada
+    win.contentView.removeChildView(discordView);
+  }
+  layoutActiveView();
+  sendToolbarUpdate();
+}
+
 function broadcastSettings() {
   const settings = store.getSettings();
   if (win && !win.isDestroyed()) win.webContents.send('settings:changed', settings);
@@ -231,7 +291,7 @@ function createWindow() {
     height: 840,
     minWidth: 480,
     minHeight: 360,
-    title: 'Umbrathel web',
+    title: 'Umbrathel Web',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 18, y: 16 },
     vibrancy: 'under-window',
@@ -253,6 +313,8 @@ function createWindow() {
     win = null;
     tabs.clear();
     activeTabId = null;
+    discordView = null;
+    discordVisible = false;
   });
 
   win.webContents.on('did-finish-load', () => {
@@ -261,6 +323,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // UA sin las marcas de Electron: evita que Discord, Google y otros
+  // servicios bloqueen el navegador por "no soportado".
+  app.userAgentFallback = app.userAgentFallback
+    .replace(/\sElectron\/[\d.]+/, '')
+    .replace(/\sUmbrathel[- ]?[Ww]eb\/[\d.]+/, '');
+
   if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON_PATH)) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
@@ -375,6 +443,8 @@ ipcMain.handle('history:clear', () => store.clearHistory());
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 
 ipcMain.handle('view:setContentVisible', (_e, visible) => setContentVisible(visible));
+
+ipcMain.handle('discord:toggle', () => setDiscordVisible(!discordVisible));
 
 // ---- Personalización ----
 

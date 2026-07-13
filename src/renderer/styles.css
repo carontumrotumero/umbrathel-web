@@ -253,6 +253,38 @@ body {
   animation: star-pop 0.4s var(--ease-spring);
 }
 
+.nav-btn svg {
+  display: block;
+  margin: 0 auto;
+}
+
+#discord-btn {
+  position: relative;
+}
+
+#discord-btn.discord-open {
+  color: #5865f2;
+  background: rgba(88, 101, 242, 0.16);
+}
+
+#discord-btn.discord-live::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #30d158;
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.9);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.6; }
+}
+
 @keyframes star-pop {
   0% {
     transform: scale(0.5) rotate(-30deg);

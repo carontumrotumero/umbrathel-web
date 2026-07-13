@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   setContentVisible: (visible) => ipcRenderer.invoke('view:setContentVisible', visible),
 
+  toggleDiscord: () => ipcRenderer.invoke('discord:toggle'),
+
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
   pickImage: (kind) => ipcRenderer.invoke('settings:pickImage', kind),

@@ -1,8 +1,8 @@
 {
   "name": "umbrathel-web",
-  "productName": "Umbrathel web",
-  "version": "0.2.0",
-  "description": "Umbrathel web — navegador de escritorio construido sobre Chromium (Electron)",
+  "productName": "Umbrathel Web",
+  "version": "0.3.0",
+  "description": "Umbrathel Web — navegador de escritorio construido sobre Chromium (Electron)",
   "main": "src/main/main.js",
   "private": true,
   "type": "commonjs",
@@ -18,12 +18,16 @@
   },
   "build": {
     "appId": "com.umbrathel.web",
-    "productName": "Umbrathel web",
+    "productName": "Umbrathel Web",
     "mac": {
-      "icon": "assets/icon.png",
+      "icon": "assets/icon.icns",
       "category": "public.app-category.productivity"
     },
-    "files": ["src/**/*", "assets/**/*", "package.json"],
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
     "publish": {
       "provider": "github",
       "owner": "carontumrotumero",
@@ -31,6 +35,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^43.1.0"
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
   }
 }

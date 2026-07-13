@@ -58,10 +58,14 @@ function renderTabs(state) {
 }
 
 const progressBar = document.getElementById('progress-bar');
+const discordBtn = document.getElementById('discord-btn');
 
 function renderToolbar(state) {
   backBtn.disabled = !state.canGoBack;
   forwardBtn.disabled = !state.canGoForward;
+
+  discordBtn.classList.toggle('discord-open', !!state.discordOpen);
+  discordBtn.classList.toggle('discord-live', !!state.discordActive && !state.discordOpen);
 
   const activeLoading = state.tabs.some((t) => t.id === state.activeTabId && t.loading);
   progressBar.classList.toggle('loading', activeLoading);
@@ -101,6 +105,7 @@ addressForm.addEventListener('submit', (e) => {
 });
 
 bookmarkBtn.addEventListener('click', () => window.api.toggleBookmark());
+discordBtn.addEventListener('click', () => window.api.toggleDiscord());
 
 const settingsPanel = document.getElementById('settings-panel');
 

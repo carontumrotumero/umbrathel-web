@@ -8,17 +8,25 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const HISTORY_LIMIT = 500;
 
-// Migración desde el directorio de datos anterior ("Navegador")
+// Migración desde directorios de datos de versiones anteriores
 (function migrateOldData() {
   try {
-    const oldDir = path.join(path.dirname(DATA_DIR), 'Navegador');
-    if (!fs.existsSync(oldDir)) return;
-    for (const file of ['bookmarks.json', 'history.json']) {
-      const from = path.join(oldDir, file);
-      const to = path.join(DATA_DIR, file);
-      if (fs.existsSync(from) && !fs.existsSync(to)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.copyFileSync(from, to);
+    for (const oldName of ['Umbrathel web', 'Navegador']) {
+      const oldDir = path.join(path.dirname(DATA_DIR), oldName);
+      if (oldDir === DATA_DIR || !fs.existsSync(oldDir)) continue;
+      for (const file of ['bookmarks.json', 'history.json', 'settings.json']) {
+        const from = path.join(oldDir, file);
+        const to = path.join(DATA_DIR, file);
+        if (fs.existsSync(from) && !fs.existsSync(to)) {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+          fs.copyFileSync(from, to);
+        }
+      }
+      // Copiar también las imágenes personalizadas (iconos y fondos)
+      const oldImages = path.join(oldDir, 'images');
+      const newImages = path.join(DATA_DIR, 'images');
+      if (fs.existsSync(oldImages) && !fs.existsSync(newImages)) {
+        fs.cpSync(oldImages, newImages, { recursive: true });
       }
     }
   } catch {

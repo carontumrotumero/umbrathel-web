@@ -1,4 +1,4 @@
-# Umbrathel web
+# Umbrathel Web
 
 Navegador de escritorio construido sobre Chromium (Electron), con estética Liquid Glass
 (vibrancy nativa de macOS), pestañas múltiples, marcadores, historial y una pantalla de
