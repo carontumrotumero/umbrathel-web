@@ -19,6 +19,11 @@ const CONTENT_GAP = 10;
 const CONTENT_RADIUS = 12;
 const DISCORD_URL = 'https://discord.com/app';
 const DISCORD_WIDTH = 400;
+// Discord solo muestra el login con código QR cuando la página tiene ~896px+
+// de ancho; por debajo la oculta y deja solo el formulario. Ensanchamos el
+// panel automáticamente mientras se está autenticando.
+const DISCORD_LOGIN_WIDTH = 960;
+const DISCORD_AUTH_PATHS = ['/login', '/register'];
 const NEW_TAB_URL = pathToFileURL(path.join(__dirname, '..', 'renderer', 'newtab.html')).href;
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 const ICON_URL = pathToFileURL(ICON_PATH).href;
@@ -34,6 +39,7 @@ let nextTabId = 1;
 // aunque el panel esté oculto o se navegue por otras pestañas.
 let discordView = null;
 let discordVisible = false;
+let discordLoginMode = false;
 
 function normalizeUrl(input) {
   const value = input.trim();
@@ -82,16 +88,17 @@ function layoutActiveView() {
   if (!win || win.isDestroyed()) return;
   const bounds = win.getContentBounds();
   const contentHeight = Math.max(0, bounds.height - TOOLBAR_HEIGHT - CONTENT_GAP);
-  const discordSpace = discordVisible ? DISCORD_WIDTH + CONTENT_GAP : 0;
+  const discordWidth = discordLoginMode ? DISCORD_LOGIN_WIDTH : DISCORD_WIDTH;
+  const discordSpace = discordVisible ? discordWidth + CONTENT_GAP : 0;
 
   if (discordView && discordVisible) {
     discordView.setBounds(
       contentHidden
         ? { x: 0, y: 0, width: 0, height: 0 }
         : {
-            x: Math.max(0, bounds.width - CONTENT_GAP - DISCORD_WIDTH),
+            x: Math.max(0, bounds.width - CONTENT_GAP - discordWidth),
             y: TOOLBAR_HEIGHT,
-            width: DISCORD_WIDTH,
+            width: Math.min(discordWidth, Math.max(0, bounds.width - CONTENT_GAP * 2)),
             height: contentHeight,
           }
     );
@@ -242,6 +249,21 @@ function getActiveWebContents() {
   return view ? view.webContents : null;
 }
 
+function updateDiscordLoginMode() {
+  if (!discordView) return;
+  let isAuthPage = false;
+  try {
+    const { pathname } = new URL(discordView.webContents.getURL());
+    isAuthPage = DISCORD_AUTH_PATHS.includes(pathname);
+  } catch {
+    isAuthPage = false;
+  }
+  if (isAuthPage !== discordLoginMode) {
+    discordLoginMode = isAuthPage;
+    layoutActiveView();
+  }
+}
+
 function ensureDiscordView() {
   if (discordView) return discordView;
   discordView = new WebContentsView({
@@ -260,6 +282,10 @@ function ensureDiscordView() {
     createTab(url);
     return { action: 'deny' };
   });
+  // Discord es una SPA: tanto la navegación completa (llegar a /login) como
+  // los cambios de ruta internos (login → app) hay que vigilarlos los dos.
+  discordView.webContents.on('did-navigate', updateDiscordLoginMode);
+  discordView.webContents.on('did-navigate-in-page', updateDiscordLoginMode);
   discordView.webContents.loadURL(DISCORD_URL);
   return discordView;
 }
