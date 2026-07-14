@@ -30,6 +30,11 @@ inicio totalmente personalizable.
 - **Actualizaciones automáticas de verdad**: en Windows y Linux se descargan e instalan sin
   salir de la app; en macOS (sin firma de Apple) se descargan dentro de la app y se abren
   listas para arrastrar a Aplicaciones.
+- **Login externo automático** (macOS): si una cuenta de Google exige llave de seguridad o
+  passkey (WebAuthn, que Electron no soporta — ver más abajo), Umbrathel Web lo detecta y
+  abre ese login en el navegador real que elijas en Personalizar, dejando la pestaña limpia.
+  No trae la sesión de vuelta (eso exigiría leer el almacén de cookies de otra app, fuera de
+  lo que se puede hacer aquí): el login se completa y se usa en la ventana externa.
 
 ## Desarrollo
 
@@ -102,4 +107,21 @@ hay que solicitarle directamente a Apple (igual que Chrome o Firefox), no basta 
 la cuenta de desarrollador. Se descartó por desproporcionado para un proyecto personal.
 
 **Mientras tanto:** usa el login por código QR o usuario/contraseña, que funcionan sin
-problema en Discord y en cualquier otro sitio.
+problema en Discord y en cualquier otro sitio. Para cuentas de Google con llave de seguridad
+obligatoria, usa el login externo automático descrito arriba.
+
+## Notas de implementación — login externo
+
+- La detección se basa en `accounts.google.com/*/signin/rejected`, la página a la que Google
+  redirige cuando la cuenta exige un segundo factor que el navegador no puede completar. Se
+  vigilan tanto navegaciones completas (`did-navigate`) como cambios de ruta en el cliente
+  (`did-navigate-in-page`) porque Google usa las dos formas según el flujo.
+- **Cada perfil navega en su propia `session` (partition), no en `session.defaultSession`.**
+  Cualquier hook a nivel de sesión (Client Hints, WebAuthn, login externo) tiene que
+  registrarse por partition — hacerlo solo en `defaultSession` no llega a la navegación real
+  y parece "no funcionar" sin dar ningún error. Ver `ensureSessionCompatHooks`.
+- Para abrir la URL en el navegador elegido se usa `open -a "<App>" <url>` (el mismo mecanismo
+  que usa Finder). **No** uses `open -a "<App>" --args --app=<url>` para simular una ventana
+  popup: esos `--args` solo se respetan si el proceso se lanza desde cero — si el navegador ya
+  estaba abierto, macOS simplemente lo trae al frente e ignora la URL por completo, y el login
+  nunca llega a abrirse (bug real, encontrado y corregido durante el desarrollo).

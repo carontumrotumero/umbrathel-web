@@ -513,6 +513,8 @@ const mcEditor = document.getElementById('mcservers-editor');
 const addMcBtn = document.getElementById('add-mcserver-btn');
 const profilesEditor = document.getElementById('profiles-editor');
 const addProfileBtn = document.getElementById('add-profile-btn');
+const setExternalAuthEnabled = document.getElementById('set-external-auth-enabled');
+const setExternalAuthBrowser = document.getElementById('set-external-auth-browser');
 const versionLabel = document.getElementById('version-label');
 const checkUpdatesBtn = document.getElementById('check-updates-btn');
 const updateResult = document.getElementById('update-result');
@@ -751,6 +753,36 @@ function renderProfilesEditor() {
 
 addProfileBtn.addEventListener('click', () => window.api.createProfile('Nuevo perfil'));
 
+let cachedExternalBrowsers = null;
+
+async function renderExternalAuthSettings(settings) {
+  const ext = settings.externalAuth || { enabled: true, browser: null };
+  setExternalAuthEnabled.checked = ext.enabled;
+
+  if (!cachedExternalBrowsers) {
+    cachedExternalBrowsers = await window.api.listExternalBrowsers();
+  }
+  setExternalAuthBrowser.innerHTML = '';
+  if (cachedExternalBrowsers.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = 'Navegador predeterminado del sistema';
+    opt.value = '';
+    setExternalAuthBrowser.appendChild(opt);
+    setExternalAuthBrowser.disabled = true;
+  } else {
+    setExternalAuthBrowser.disabled = false;
+    cachedExternalBrowsers.forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      setExternalAuthBrowser.appendChild(opt);
+    });
+    setExternalAuthBrowser.value = ext.browser && cachedExternalBrowsers.includes(ext.browser)
+      ? ext.browser
+      : cachedExternalBrowsers[0];
+  }
+}
+
 function renderSettingsPanel(settings) {
   setCloseLast.value = settings.closeLastTab;
   setAccent.value = settings.accent;
@@ -758,6 +790,7 @@ function renderSettingsPanel(settings) {
   setBorderC1.value = settings.borders.colors[0];
   setBorderC2.value = settings.borders.colors[1];
   borderColorsRow.classList.toggle('hidden', settings.borders.mode !== 'colors');
+  renderExternalAuthSettings(settings);
 
   const bg = settings.newtab.background;
   setBgType.value = bg.type;
@@ -800,6 +833,13 @@ const commitBorderColors = () =>
   saveSettings({ borders: { colors: [setBorderC1.value, setBorderC2.value] } });
 setBorderC1.addEventListener('change', commitBorderColors);
 setBorderC2.addEventListener('change', commitBorderColors);
+
+setExternalAuthEnabled.addEventListener('change', () =>
+  saveSettings({ externalAuth: { enabled: setExternalAuthEnabled.checked } })
+);
+setExternalAuthBrowser.addEventListener('change', () =>
+  saveSettings({ externalAuth: { browser: setExternalAuthBrowser.value } })
+);
 
 setBgType.addEventListener('change', async () => {
   if (setBgType.value === 'image' && !currentSettings.newtab.background.image) {

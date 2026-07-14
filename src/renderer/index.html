@@ -134,6 +134,21 @@
         </section>
 
         <section class="settings-section">
+          <h3>Login externo</h3>
+          <p class="settings-hint">Algunas cuentas de Google exigen llave de seguridad o
+            passkey — Electron no puede completar eso. Si pasa, se abre el login en el
+            navegador que elijas aquí.</p>
+          <label class="settings-row">
+            <span>Abrir en navegador externo si Google lo rechaza</span>
+            <input type="checkbox" id="set-external-auth-enabled" />
+          </label>
+          <label class="settings-row">
+            <span>Navegador</span>
+            <select id="set-external-auth-browser"></select>
+          </label>
+        </section>
+
+        <section class="settings-section">
           <h3>Pantalla de inicio</h3>
           <label class="settings-row">
             <span>Fondo</span>

@@ -185,6 +185,10 @@ const DEFAULT_SETTINGS = {
   pinnedApps: [
     { id: 'discord', title: 'Discord', url: 'https://discord.com/app', icon: null, builtin: true },
   ],
+  // Cuando Google (u otros) rechaza el login por exigir WebAuthn (llave de
+  // seguridad / iCloud Keychain), que Electron no puede hacer: abrirlo en un
+  // navegador de verdad en vez de dejar al usuario en un callejón sin salida.
+  externalAuth: { enabled: true, browser: null },
 };
 
 const HISTORY_LIMIT_PER_PROFILE = HISTORY_LIMIT;

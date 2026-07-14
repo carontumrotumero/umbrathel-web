@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('api', {
   recolorProfile: (id, color) => ipcRenderer.invoke('profiles:recolor', { id, color }),
   deleteProfile: (id) => ipcRenderer.invoke('profiles:delete', id),
 
+  listExternalBrowsers: () => ipcRenderer.invoke('externalAuth:listBrowsers'),
+
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
   pickImage: (kind) => ipcRenderer.invoke('settings:pickImage', kind),

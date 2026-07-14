@@ -12,6 +12,7 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const store = require('./store');
 const updater = require('./updater');
@@ -161,6 +162,7 @@ function setContentVisible(visible) {
 }
 
 function createTab(url = NEW_TAB_URL, { activate = true } = {}) {
+  ensureSessionCompatHooks(currentPartition());
   const view = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'tab-preload.js'),
@@ -192,6 +194,7 @@ function createTab(url = NEW_TAB_URL, { activate = true } = {}) {
     createTab(targetUrl);
     return { action: 'deny' };
   });
+  setupExternalAuthRedirect(wc);
 
   wc.loadURL(url);
 
@@ -379,6 +382,7 @@ function ensurePinnedView(id) {
   const config = findPinnedConfig(id);
   if (!config) return null;
 
+  ensureSessionCompatHooks(currentPartition());
   const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -399,6 +403,7 @@ function ensurePinnedView(id) {
   });
   wc.on('did-navigate', () => checkLoginWide(id, wc));
   wc.on('did-navigate-in-page', () => checkLoginWide(id, wc));
+  setupExternalAuthRedirect(wc);
   wc.loadURL(config.url);
 
   return view;
@@ -574,6 +579,116 @@ function setupWebAuthnAccountPicker(ses) {
   });
 }
 
+// ---- Login externo para cuentas con llave de seguridad / passkey ----
+//
+// Electron no implementa el ciclo de WebAuthn (navigator.credentials), así
+// que las cuentas de Google que EXIGEN llave de seguridad o iCloud Keychain
+// (sin opción de solo contraseña) nunca podrán completar el login dentro de
+// la app — Google directamente redirige a una página de rechazo. En vez de
+// dejar al usuario en un callejón sin salida, detectamos esa página y
+// abrimos el login en un navegador de verdad, donde WebAuthn sí funciona.
+//
+// Importante: esto NO trae la sesión de vuelta a Umbrathel Web (eso exigiría
+// leer el almacén de cookies de otra app, que está fuera de lo que se puede
+// hacer aquí) — el usuario completa el login en la ventana externa y sigue
+// usando esa cuenta ahí para lo que la necesite.
+
+const KNOWN_BROWSERS = [
+  { name: 'Safari', path: '/Applications/Safari.app' },
+  { name: 'Google Chrome', path: '/Applications/Google Chrome.app' },
+  { name: 'Microsoft Edge', path: '/Applications/Microsoft Edge.app' },
+  { name: 'Brave Browser', path: '/Applications/Brave Browser.app' },
+  { name: 'Vivaldi', path: '/Applications/Vivaldi.app' },
+  { name: 'Opera', path: '/Applications/Opera.app' },
+  { name: 'Arc', path: '/Applications/Arc.app' },
+  { name: 'Firefox', path: '/Applications/Firefox.app' },
+];
+
+function detectInstalledBrowsers() {
+  if (process.platform !== 'darwin') {
+    // Windows/Linux: sin detección específica todavía, solo el navegador
+    // predeterminado del sistema vía shell.openExternal.
+    return [];
+  }
+  return KNOWN_BROWSERS.filter((b) => fs.existsSync(b.path));
+}
+
+function openInExternalBrowser(url, browserName) {
+  const browsers = detectInstalledBrowsers();
+  const target = browsers.find((b) => b.name === browserName) || browsers[0];
+
+  if (process.platform !== 'darwin' || !target) {
+    shell.openExternal(url);
+    return;
+  }
+
+  // "open -a <App> <url>" es el mecanismo estándar de macOS para "abre esta
+  // URL con esta app" (lo mismo que hace Finder) — funciona tanto si el
+  // navegador ya está abierto como si no. La alternativa con --args --app=
+  // (ventana sin pestañas, estilo popup) solo respeta la URL al LANZAR el
+  // proceso desde cero: si el navegador ya estaba abierto, macOS se limita a
+  // traerlo al frente e ignora la URL por completo — así que se descarta esa
+  // vía en favor de que el login se abra siempre de verdad.
+  execFile('open', ['-a', target.name, url], (err) => {
+    if (err) shell.openExternal(url); // último recurso si algo falla
+  });
+}
+
+function isGoogleRejectedSignin(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname === 'accounts.google.com' && u.pathname.includes('/signin/rejected');
+  } catch {
+    return false;
+  }
+}
+
+function extractContinueUrl(rejectedUrl) {
+  try {
+    return new URL(rejectedUrl).searchParams.get('continue') || 'https://accounts.google.com/';
+  } catch {
+    return 'https://accounts.google.com/';
+  }
+}
+
+function setupExternalAuthRedirect(wc) {
+  let lastHandledUrl = null;
+
+  const handle = () => {
+    const url = wc.getURL();
+    if (!isGoogleRejectedSignin(url)) return;
+    if (url === lastHandledUrl) return; // did-navigate y did-navigate-in-page pueden coincidir
+    lastHandledUrl = url;
+
+    const settings = activeStore.getSettings();
+    if (!settings.externalAuth || !settings.externalAuth.enabled) return;
+
+    const continueUrl = extractContinueUrl(url);
+    openInExternalBrowser(continueUrl, settings.externalAuth.browser);
+
+    // Dejar la pestaña en un estado limpio en vez del callejón sin salida
+    if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+    else wc.loadURL(NEW_TAB_URL);
+
+    const browsers = detectInstalledBrowsers();
+    const usedName =
+      (browsers.find((b) => b.name === settings.externalAuth.browser) || browsers[0] || {}).name ||
+      'tu navegador';
+    dialog.showMessageBox(win, {
+      type: 'info',
+      title: 'Login abierto en otro navegador',
+      message: `Esta cuenta exige llave de seguridad o passkey, algo que Umbrathel Web todavía no soporta.`,
+      detail: `Se abrió el inicio de sesión en ${usedName}. Complétalo ahí y vuelve cuando termines.`,
+    });
+  };
+
+  // Google reescribe a la página de rechazo tanto con una navegación
+  // completa como, en algunas variantes, con enrutado en el cliente (SPA) —
+  // hay que vigilar los dos tipos de evento para no perderla.
+  wc.on('did-navigate', handle);
+  wc.on('did-navigate-in-page', handle);
+}
+
 // Chromium (no "Google Chrome") es lo que Electron trae de fábrica. Sitios
 // como accounts.google.com bloquean el login ("This browser or app may not
 // be secure") en cuanto detectan un user-agent embebido: comprueban tanto la
@@ -588,8 +703,8 @@ function platformClientHint() {
   return '"Linux"';
 }
 
-function setupBrowserCompatSpoofing() {
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+function setupBrowserCompatSpoofing(ses) {
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
     if (/^https?:/.test(details.url)) {
       details.requestHeaders['sec-ch-ua'] =
         `"Not)A;Brand";v="8", "Chromium";v="${CHROME_MAJOR}", "Google Chrome";v="${CHROME_MAJOR}"`;
@@ -600,6 +715,20 @@ function setupBrowserCompatSpoofing() {
   });
 }
 
+// Cada perfil navega en su propia partition/Session (aislamiento de cookies),
+// no en session.defaultSession — así que los hooks de compatibilidad hay que
+// aplicarlos por partition, no una sola vez al arrancar. Memoizado para no
+// registrar el mismo listener dos veces si se llama varias veces.
+const hookedPartitions = new Set();
+
+function ensureSessionCompatHooks(partitionName) {
+  if (hookedPartitions.has(partitionName)) return;
+  hookedPartitions.add(partitionName);
+  const ses = session.fromPartition(partitionName);
+  setupBrowserCompatSpoofing(ses);
+  setupWebAuthnAccountPicker(ses);
+}
+
 app.whenReady().then(() => {
   // UA sin las marcas de Electron: evita que Discord, Google y otros
   // servicios bloqueen el navegador por "no soportado".
@@ -607,9 +736,7 @@ app.whenReady().then(() => {
     .replace(/\sElectron\/[\d.]+/, '')
     .replace(/\sUmbrathel[- ]?[Ww]eb\/[\d.]+/, '');
 
-  setupBrowserCompatSpoofing();
   setupWebAuthn();
-  setupWebAuthnAccountPicker(session.defaultSession);
 
   if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON_PATH)) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
@@ -782,6 +909,8 @@ ipcMain.handle('settings:pickImage', async (_e, kind) => {
   fs.copyFileSync(src, dest);
   return pathToFileURL(dest).href;
 });
+
+ipcMain.handle('externalAuth:listBrowsers', () => detectInstalledBrowsers().map((b) => b.name));
 
 ipcMain.handle('updates:check', () => updater.checkForUpdates());
 ipcMain.handle('app:version', () => app.getVersion());
