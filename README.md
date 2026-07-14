@@ -59,6 +59,33 @@ Esto construye y sube binarios + metadatos de actualización en un solo paso (ev
 de nombres que da subir los archivos a mano). El navegador detectará la nueva versión desde
 Personalizar → Actualizaciones.
 
+### Regla de oro: nunca reutilices un tag de versión
+
+`electron-builder --publish always` crea la release como **borrador** y solo la publica
+(no-draft) si el proceso entero termina sin errores. Con builds multiplataforma largas
+(mac + win + linux, ~15-20 min) es fácil que algo falle a mitad — hemos visto un bug propio
+de electron-builder donde subir el `.zip` de x64 y arm64 en paralelo choca con GitHub
+("already_exists") y tira todo el proceso. Si eso pasa, **NO** intentes arreglarlo borrando
+y republicando bajo el mismo tag: eso deja duplicados o releases fantasma en borrador,
+invisibles para `/releases/latest` y por tanto para el comprobador de actualizaciones —
+exactamente lo que pasó con v0.4.0 y casi pasa dos veces con v0.5.0.
+
+**En vez de eso: sube el número de versión (p. ej. `0.5.0` → `0.5.1`) y publica limpio con
+ese tag nuevo.** Un tag nunca usado nunca puede chocar con nada. Solo borra una release si
+de verdad hace falta (y entonces borra también su tag con `--cleanup-tag`), nunca para
+"reintentar" la misma versión.
+
+Si aun así una publicación se queda a medias, para diagnosticar:
+
+```bash
+# ¿Hay releases duplicadas o en borrador con el mismo tag?
+gh api repos/carontumrotumero/umbrathel-web/releases --jq '.[] | {id, tag_name, draft}'
+
+# ¿Le faltan los .yml de metadatos de actualización? (si faltan, el build murió
+# antes de generarlos — no vale con solo re-subir binarios)
+gh release view vX.Y.Z --json assets --jq '.assets[] | select(.name | endswith(".yml"))'
+```
+
 ## Limitaciones conocidas
 
 **Llaves de seguridad físicas y Touch ID (WebAuthn) no funcionan.** No es un bug de este
